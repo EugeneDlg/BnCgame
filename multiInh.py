@@ -79,24 +79,53 @@
 # r = respbarry()
 # print(r.x)
 
+#
+# class B():
+#     def __init__(self):
+#         print("B")
+#
+#
+# class C():
+#     def __init__(self):
+#         print("C")
+#         # super(C, self).__init__()
+#         B.__init__(self)
+#
+#
+#
+# class D(C):
+#     def __init__(self):
+#         print("D")
+#         super().__init__()
+#
+#
+# d = D()
+import tkinter
+from tkinter import *
 
-class B():
+class MainWin(Tk):
     def __init__(self):
-        print("B")
-
-
-class C():
-    def __init__(self):
-        print("C")
-        # super(C, self).__init__()
-        B.__init__(self)
-
-
-
-class D(C):
-    def __init__(self):
-        print("D")
         super().__init__()
 
 
-d = D()
+class LoginWin(tkinter.Toplevel):
+    def __init__(self, parent_window):
+        super().__init__(parent_window)
+
+
+
+
+main_win = MainWin()
+# main_win.capacity = 5
+main_win.title("Bulls and Cows Game")
+main_win.geometry("200x200")
+main_win.resizable(0, 0)
+main_win.lb1 = Label(main_win, text='Enter a total number ', font='arial 8')
+main_win.lb1.pack(fill='none')
+# loginw = LoginWin(main_win)
+# loginw = tkinter.Toplevel(main_win)
+# loginw.lb1 = Label(loginw, text='SSSSSSSSSSS', font='arial 8')
+# loginw.lb1.pack(fill='none')
+
+main_win.mainloop()
+

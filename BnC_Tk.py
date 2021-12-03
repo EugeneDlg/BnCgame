@@ -61,11 +61,11 @@ class Privileges(Base):
                     self.modify_other, self.delete_self, self.delete_other)
 
 
-class Class:
-    pass
+# class Class:
+#     pass
 
 
-class Game(Class):
+class Game():
     session = None
     engine = None
     text_for_restoring_password = """\
@@ -102,8 +102,7 @@ class Game(Class):
         # self.initial_main_height = 200
         # self.initial_main_width = 470
 
-        self.login_window_width = 360
-        self.login_window_height = 180
+
         self.users_window_width = 440
         self.users_window_height = 180
         self.restore_window_width = 350
@@ -638,7 +637,7 @@ class Game(Class):
             self.show_messagebox(self.main_win, ret_msg)
             exit()
         elif ret_msg.is_warning():
-            self.admin_needed = True
+            self.game.admin_needed = True
 
     @staticmethod
     def prepare_db():
@@ -664,7 +663,120 @@ class Game(Class):
 
 
 
-class MainWin(Game, Tk):
+
+class LoginWindow(tkinter.Toplevel):
+    def __init__(self, parent_window):
+        super().__init__(parent_window)
+        self.login_window_width = 360
+        self.login_window_height = 180
+
+    def authenticate_user_eh(self):
+        login = self.login_entry.get()
+        password = self.password_entry.get()
+        r_msg = Game.authenticate_user(login, password)
+        if r_msg:
+            MessageBox.show_message(self, r_msg)
+            return
+        self.game.loggedin_user = login
+        r_msg = Game.retrieve_user_privileges(login)
+        if r_msg:
+            MessageBox.show_message(self, r_msg)
+            return
+        r_msg = "You've successfully logged in!"
+        if self.game.admin_needed:
+            r_msg += " Please do not forget to create Administrator user."
+        MessageBox.show_message(self, ResponseMsg(r_msg, "info"))
+        self.grab_release()
+        self.withdraw()
+        self.main_win.wm_attributes('-topmost', 'yes')
+        self.main_win.grab_set()
+        self.main_win.focus_set()
+
+
+    def change_password_eh(self):
+        """
+
+        :rtype: object
+        """
+        login = self.login_window_lg_en.get().strip().lower()
+        password1 = self.password_en1.get().strip()
+        password2 = self.password_en2.get().strip()
+        r_msg = Game.validate_password(password1, password2)
+        if r_msg:
+            self.show_messagebox(self.restore_window, ResponseMsg(r_msg, "error"))
+            return
+        r_msg = self.modify_user(login, password1, only_password=True)
+        if r_msg:
+            self.show_messagebox(self.restore_window, r_msg)
+            return
+        self.show_messagebox(self.login_window, ResponseMsg("Password successfully changed", "info"))
+        self.close()
+
+    def open_restore_password_window(self):
+        login = self.login_window_lg_en.get().strip().lower()
+        r_msg = Game.validate_user(login, op="other")
+        if r_msg:
+            self.show_messagebox(self.login_window, r_msg)
+            return
+        user_data = self.get_user_by_login(login)
+        email = user_data.email
+        # self.login_window.wm_attributes('-topmost', 'no')
+        self.login_window.grab_release()
+        self.restore_window = tkinter.Toplevel(self.login_window)
+        self.current_window = self.restore_window
+        self.restore_window.title("Restore password")
+        self.restore_window.geometry(str(self.restore_window_width) + 'x' + str(self.restore_window_height))
+        self.restore_window.resizable(0, 0)
+        # self.restore_window_lb0 = Label(self.restore_window, text='Please click button to send a pin-code to your
+        # email',font='arial 9')
+        self.restore_window_lb0 = Label(self.restore_window, text='Please enter a pincode sent to your email:',
+                                        font='arial 9')
+        self.restore_window_lb0.place(x=10, y=10)
+        self.restore_window_pc_en = Entry(self.restore_window, width=6, font='Arial 9', state='normal')
+        self.restore_window_pc_en.place(x=250, y=10)
+        self.restore_window_pc_bt = Button(self.restore_window, text='Ok', font='arial 7',
+                                           command=self.verify_pincode_eh)
+        self.restore_window_pc_bt.place(x=300, y=10)
+        self.restore_window_cp_lb = Label(self.restore_window, text='Please enter a new password:',
+                                          font='arial 9')
+        self.restore_window_cp_lb.place(x=90, y=50)
+        self.restore_window_cp_lb["state"] = "disabled"
+        self.password_en1 = Entry(self.restore_window, width=25, font='Arial 8', show="*", state='normal')
+        self.password_en1.place(x=95, y=70)
+        self.password_en1["state"] = "disabled"
+        self.password_en2 = Entry(self.restore_window, width=25, font='Arial 8', show="*", state='normal')
+        self.password_en2.place(x=95, y=95)
+        self.password_en2["state"] = "disabled"
+        self.restore_window_cp_bt = Button(self.restore_window, text='Change password', font='arial 8',
+                                           command=self.change_password_eh)
+        self.restore_window_cp_bt.place(x=110, y=125)
+        self.restore_window_cp_bt["state"] = "disabled"
+        self.restore_window_show_pass_bt = Button(self.restore_window, text='O_O', font='arial 6',
+                                                  command=self.show_password)
+        self.restore_window_show_pass_bt.place(x=267, y=55)
+        self.restore_window_show_pass_bt["state"] = "disabled"
+        # self.restore_window_bt0 = Button(self.restore_window, text='Send code', font='arial 6',
+        #                                  command=self.send_pincode_eh)
+        # self.restore_window_bt0.place(x=350, y=10)
+        self.restore_window.transient(self.login_window)
+        self.restore_window.grab_set()
+        self.restore_window.focus_set()
+        self.restore_window.protocol("WM_DELETE_WINDOW", self.close)
+        self.send_pincode(email)
+
+
+class UserWindow(tkinter.Toplevel):
+    def __init__(self):
+        super().__init__()
+
+    def close(self):
+        if self.login_window.state() == "normal":
+            self.login_window.grab_set()
+            self.login_window.focus_set()
+        self.destroy()
+
+
+class MainWin(Tk):
     def __init__(self):
         super().__init__()
         self.initial_main_height = 200
@@ -677,40 +789,6 @@ class MainWin(Game, Tk):
         self.lb3_ = None
         self.text1 = None
         self.text2 = None
-
-    def show_messagebox(self, parent_window, msg):
-        def myclose():
-            parent_window.grab_set()
-            messagebox.destroy()
-        # parent_window.grab_release()
-        text = str(msg.get_text())
-        msg_len = len(text)
-        text = text.split("\n")[0]
-        text_list = text.split(" ")
-        text_split_len = len(text_list)
-        result_str = ''
-        new_line_num = 1
-        for c in text_list:
-            if len(result_str) < 40 * new_line_num:
-                result_str += " " + c
-            else:
-                new_line_num += 1
-                result_str += "\n" + c
-        max_messagebox_width = self.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
-                                                                             reverse=True)[0])) * 10
-        max_messagebox_height = new_line_num * 20 + 20
-        messagebox = tkinter.Toplevel(parent_window)
-        messagebox.title(msg.get_type())
-        messagebox.geometry(str(max_messagebox_width) + 'x' + str(max_messagebox_height))
-        messagebox.resizable(0, 0)
-        # messagebox.wm_attributes('-topmost', 'yes')
-        msgbox_lb = Label(messagebox, text=result_str, font='arial 10', anchor='w')
-        msgbox_lb.pack(fill='none')
-        msg_bt = Button(messagebox, text="OK", width=12, command=lambda: myclose())
-        msg_bt.pack(fill='none')
-        messagebox.transient(parent_window)
-        messagebox.grab_set()
-        messagebox.focus_set()
 
     def button_clicked(self):
         if self.new_game_requested:
@@ -790,110 +868,45 @@ class MainWin(Game, Tk):
         self.automate_answer()
 
     def show_login_window(self):
-        self.login_window = tkinter.Toplevel(self.main_win)
-        self.login_window.geometry(str(self.login_window_width) + 'x' + str(self.login_window_height))
-        self.login_window.resizable(0, 0)
+        login_window = LoginWindow(self)
+        login_window_width = login_window.login_window_width
+        login_window_height = login_window.login_window_height
+        login_window.main_win = self
+        login_window.game = self.game
+        login_window.geometry(str(login_window_width) + 'x' + str(login_window_height))
+        login_window.resizable(0, 0)
         # self.login_window.wm_attributes('-topmost', 'yes')
-        self.login_window_lb0 = Label(self.login_window, text='Please enter your login and password: ',
-                                      font='TimesNewRoman 12', fg='#e0e')
-        self.login_window_lb0.place(x=40, y=10)
-        self.login_window_lg_lb = Label(self.login_window, text='Login:', font='Arial 10')
-        self.login_window_lg_lb.place(x=10, y=40)
-        self.login_window_lg_en = Entry(self.login_window, width=25, font='Arial 10', state='normal')
-        self.login_window_lg_en.place(x=100, y=40)
-        self.login_window_ps_lb = Label(self.login_window, text='Password:', font='arial 10')
-        self.login_window_ps_lb.place(x=10, y=80)
-        self.login_window_ps_en = Entry(self.login_window, width=25, font='Arial 10', show='*', state='normal')
-        self.login_window_ps_en.place(x=100, y=80)
-        self.login_window_lg_bt = Button(self.login_window, text='Login', font='arial 10',
-                                         command=self.authenticate_user_eh)
-        self.login_window_lg_bt.place(x=30, y=120)
-        self.login_window_nu_bt = Button(self.login_window, text='New user...', font='arial 10',
-                                         command=self.open_users_window)
-        self.login_window_nu_bt.place(x=90, y=120)
-        self.login_window_rp_bt = Button(self.login_window, text='Restore password...', font='arial 6',
-                                         command=self.open_restore_password_window)
-        self.login_window_rp_bt.place(x=188, y=126)
-        self.login_window_ex_bt = Button(self.login_window, text='Exit', font='arial 10',
-                                         command=self.close)
-        self.login_window_ex_bt.place(x=285, y=120)
-        self.login_window.transient(self.main_win)
-        self.login_window.grab_set()
-        self.login_window.focus_set()
-        self.login_window.protocol("WM_DELETE_WINDOW", self.close_main_window)
+        login_window.label0 = Label(login_window, text='Please enter your login and password: ',
+                                    font='TimesNewRoman 12', fg='#e0e')
+        login_window.label0.place(x=40, y=10)
+        login_window.login_lb = Label(login_window, text='Login:', font='Arial 10')
+        login_window.login_lb.place(x=10, y=40)
+        login_window.login_entr = Entry(login_window, width=25, font='Arial 10', state='normal')
+        login_window.login_entr.place(x=100, y=40)
+        login_window.passwod_lb = Label(login_window, text='Password:', font='arial 10')
+        login_window.passwod_lb.place(x=10, y=80)
+        login_window.passwod_entry = Entry(login_window, width=25, font='Arial 10', show='*', state='normal')
+        login_window.passwod_entry.place(x=100, y=80)
+        login_window.login_button = Button(login_window, text='Login', font='arial 10',
+                                           command=login_window.authenticate_user_eh)
+        login_window.login_button.place(x=30, y=120)
+        login_window.new_user_button = Button(login_window, text='New user...', font='arial 10',
+                                              command=self.open_users_window)
+        login_window.new_user_button.place(x=90, y=120)
+        login_window.recovery_button = Button(login_window, text='Reset password...', font='arial 6',
+                                              command=login_window.open_restore_password_window)
+        login_window.recovery_button.place(x=188, y=126)
+        login_window.exit_button = Button(login_window, text='Exit', font='arial 10',
+                                          command=self.close)
+        login_window.exit_button.place(x=285, y=120)
+        login_window.transient(self)
+        login_window.grab_set()
+        login_window.focus_set()
+        login_window.protocol("WM_DELETE_WINDOW", self.close)
 
-    def open_restore_password_window(self):
-        login = self.login_window_lg_en.get().strip().lower()
-        r_msg = Game.validate_user(login, op="other")
-        if r_msg:
-            self.show_messagebox(self.login_window, r_msg)
-            return
-        user_data = self.get_user_by_login(login)
-        email = user_data.email
-        # self.login_window.wm_attributes('-topmost', 'no')
-        self.login_window.grab_release()
-        self.restore_window = tkinter.Toplevel(self.login_window)
-        self.current_window = self.restore_window
-        self.restore_window.title("Restore password")
-        self.restore_window.geometry(str(self.restore_window_width) + 'x' + str(self.restore_window_height))
-        self.restore_window.resizable(0, 0)
-        # self.restore_window_lb0 = Label(self.restore_window, text='Please click button to send a pin-code to your
-        # email',font='arial 9')
-        self.restore_window_lb0 = Label(self.restore_window, text='Please enter a pincode sent to your email:',
-                                        font='arial 9')
-        self.restore_window_lb0.place(x=10, y=10)
-        self.restore_window_pc_en = Entry(self.restore_window, width=6, font='Arial 9', state='normal')
-        self.restore_window_pc_en.place(x=250, y=10)
-        self.restore_window_pc_bt = Button(self.restore_window, text='Ok', font='arial 7',
-                                           command=self.verify_pincode_eh)
-        self.restore_window_pc_bt.place(x=300, y=10)
-        self.restore_window_cp_lb = Label(self.restore_window, text='Please enter a new password:',
-                                          font='arial 9')
-        self.restore_window_cp_lb.place(x=90, y=50)
-        self.restore_window_cp_lb["state"] = "disabled"
-        self.password_en1 = Entry(self.restore_window, width=25, font='Arial 8', show="*", state='normal')
-        self.password_en1.place(x=95, y=70)
-        self.password_en1["state"] = "disabled"
-        self.password_en2 = Entry(self.restore_window, width=25, font='Arial 8', show="*", state='normal')
-        self.password_en2.place(x=95, y=95)
-        self.password_en2["state"] = "disabled"
-        self.restore_window_cp_bt = Button(self.restore_window, text='Change password', font='arial 8',
-                                           command=self.change_password_eh)
-        self.restore_window_cp_bt.place(x=110, y=125)
-        self.restore_window_cp_bt["state"] = "disabled"
-        self.restore_window_show_pass_bt = Button(self.restore_window, text='O_O', font='arial 6',
-                                                  command=self.show_password)
-        self.restore_window_show_pass_bt.place(x=267, y=55)
-        self.restore_window_show_pass_bt["state"] = "disabled"
-        # self.restore_window_bt0 = Button(self.restore_window, text='Send code', font='arial 6',
-        #                                  command=self.send_pincode_eh)
-        # self.restore_window_bt0.place(x=350, y=10)
-        self.restore_window.transient(self.login_window)
-        self.restore_window.grab_set()
-        self.restore_window.focus_set()
-        self.restore_window.protocol("WM_DELETE_WINDOW", self.close)
-        self.send_pincode(email)
 
-    def change_password_eh(self):
-        login = self.login_window_lg_en.get().strip().lower()
-        password1 = self.password_en1.get().strip()
-        password2 = self.password_en2.get().strip()
-        r_msg = Game.validate_password(password1, password2)
-        if r_msg:
-            self.show_messagebox(self.restore_window, ResponseMsg(r_msg, "error"))
-            return
-        r_msg = self.modify_user(login, password1, only_password=True)
-        if r_msg:
-            self.show_messagebox(self.restore_window, r_msg)
-            return
-        self.show_messagebox(self.login_window, ResponseMsg("Password successfully changed", "info"))
-        self.close()
 
-    def close(self):
-        if self.login_window.state() == "normal":
-            self.login_window.grab_set()
-            self.login_window.focus_set()
-        self.current_window.destroy()
+
 
     @staticmethod
     def disable_event():
@@ -902,28 +915,7 @@ class MainWin(Game, Tk):
     def donothing(self):
         pass
 
-    def authenticate_user_eh(self):
-        login = self.login_window_lg_en.get()
-        password = self.login_window_ps_en.get()
-        r_msg = Game.authenticate_user(login, password)
-        if r_msg:
-            self.show_messagebox(self.login_window, r_msg)
-            return
-        self.loggedin_user = login
-        r_msg = self.retrieve_user_privileges(login)
-        if r_msg:
-            self.show_messagebox(self.login_window, r_msg)
-            return
 
-        r_msg = "You've successfully logged in!"
-        if self.admin_needed:
-            r_msg += " Please do not forget to create Administrator user."
-        self.show_messagebox(self.login_window, ResponseMsg(r_msg, "info"))
-        self.login_window.grab_release()
-        self.login_window.withdraw()
-        self.main_win.wm_attributes('-topmost', 'yes')
-        self.main_win.grab_set()
-        self.main_win.focus_set()
 
     def finish_game(self, set_size, label_text, label_color):
         self.reset_to_initials()
@@ -1195,6 +1187,50 @@ class MainWin(Game, Tk):
 
 
 
+class MessageBox(Tk):
+    max_messagebox_width = 470
+    max_messagebox_height = 200
+
+    def __init__(self, parent_window):
+        super().__init__()
+        self.parent_window = parent_window
+
+    @staticmethod
+    def show_message(parent_window, msg):
+        def myclose():
+            parent_window.grab_set()
+            messagebox.destroy()
+        # parent_window.grab_release()
+        text = str(msg.get_text())
+        msg_len = len(text)
+        text = text.split("\n")[0]
+        text_list = text.split(" ")
+        text_split_len = len(text_list)
+        result_str = ''
+        new_line_num = 1
+        for c in text_list:
+            if len(result_str) < 40 * new_line_num:
+                result_str += " " + c
+            else:
+                new_line_num += 1
+                result_str += "\n" + c
+        max_messagebox_width = max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
+                                                                        reverse=True)[0])) * 10
+        max_messagebox_height = new_line_num * 20 + 20
+        messagebox = tkinter.Toplevel(parent_window)
+        messagebox.title(msg.get_type())
+        messagebox.geometry(str(max_messagebox_width) + 'x' + str(max_messagebox_height))
+        messagebox.resizable(0, 0)
+        # messagebox.wm_attributes('-topmost', 'yes')
+        msgbox_lb = Label(messagebox, text=result_str, font='arial 10', anchor='w')
+        msgbox_lb.pack(fill='none')
+        msgbox_bt = Button(messagebox, text="OK", width=12, command=lambda: myclose())
+        msgbox_bt.pack(fill='none')
+        messagebox.transient(parent_window)
+        messagebox.grab_set()
+        messagebox.focus_set()
+
+
 class ResponseMsg:
     def __init__(self, msg_text, msg_type):
         self.msg_text = msg_text
@@ -1228,12 +1264,12 @@ class ResponseMsg:
 
 
 if __name__ == '__main__':
+    game = Game()
     main_win = MainWin()
-    #main_win.capacity = 5
     main_win.title("Bulls and Cows Game")
     main_win.geometry(f'{main_win.initial_main_width}x{main_win.initial_main_height}')
     main_win.resizable(0, 0)
-    main_win.prepare_game()
+    game.prepare_game()
     main_win.menubar = Menu(main_win)
     main_win.filemenu = Menu(main_win.menubar, tearoff=0)
     main_win.filemenu.add_command(label="New", command=main_win.new_game_clicked)
@@ -1247,7 +1283,7 @@ if __name__ == '__main__':
     main_win.helpmenu.add_command(label="About...", command=main_win.open_about_window)
     main_win.menubar.add_cascade(label="Help", menu=main_win.helpmenu)
     main_win.config(menu=main_win.menubar)
-    main_win.lb0 = Label(main_win, text="Think of a number with " + str(main_win.capacity) + " unique digits!",
+    main_win.lb0 = Label(main_win, text="Think of a number with " + str(game.capacity) + " unique digits!",
                          font='arial 12')
     main_win.lb0.bind("<Double-Button-1>", main_win.mouse_function_hide)
     main_win.lb0.bind("<Double-Button-3>", main_win.mouse_function_show)
@@ -1263,12 +1299,13 @@ if __name__ == '__main__':
     main_win.text2.pack()
     main_win.button = Button(main_win, text="OK! Go on!", width=20, command=main_win.button_clicked)
     main_win.button.pack(fill='none')
-    main_win.lb3_ = Label(main_win, text="Previous set: " + str(len(main_win.previous_all_set)), font='arial 5')
+    main_win.lb3_ = Label(main_win, text="Previous set: " + str(len(game.previous_all_set)), font='arial 5')
     #  lb3_.pack(fill='none', side='bottom')
     #  lb3_.pack_forget()
     main_win.fr0 = LabelFrame(main_win, text='History of attempts', labelanchor='n', font='arial 8', padx='80')
-    main_win.lb4 = Label(main_win, text="Attempts: " + str(main_win.attempts), font='arial 8')
+    main_win.lb4 = Label(main_win, text="Attempts: " + str(game.attempts), font='arial 8')
     main_win.lb4.pack(fill='none', side='bottom')
     main_win.protocol('WM_DELETE_WINDOW', main_win.close)
+    main_win.game = game
     main_win.show_login_window()
     main_win.mainloop()
