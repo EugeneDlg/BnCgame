@@ -108,7 +108,15 @@ class MainWin(Tk):
         super().__init__()
 
 
-class LoginWin(tkinter.Toplevel):
+class LoginWin0(Toplevel):
+    def __init__(self, parent_window):
+        super().__init__(parent_window)
+
+
+class ASD():
+    pass
+
+class LoginWin(LoginWin0, ASD):
     def __init__(self, parent_window):
         super().__init__(parent_window)
 
@@ -122,10 +130,37 @@ main_win.geometry("200x200")
 main_win.resizable(0, 0)
 main_win.lb1 = Label(main_win, text='Enter a total number ', font='arial 8')
 main_win.lb1.pack(fill='none')
-# loginw = LoginWin(main_win)
-# loginw = tkinter.Toplevel(main_win)
-# loginw.lb1 = Label(loginw, text='SSSSSSSSSSS', font='arial 8')
-# loginw.lb1.pack(fill='none')
-
+loginw = LoginWin(main_win)
+loginw.lb1 = Label(loginw, text='SSSSSSSSSSS', font='arial 8')
+loginw.lb1.pack(fill='none')
+if issubclass(LoginWin0,object):
+    print("AAAA")
 main_win.mainloop()
 
+
+
+# class A:
+#     def __init__(self):
+#         print("A")
+#
+# class B(A):
+#     def __init__(self):
+#         print("B")
+#         super().__init__()
+#
+#
+# class C():
+#     def __init__(self):
+#         print("C")
+#         super().__init__()
+#
+#
+#
+# class D(B, C):
+#     def __init__(self):
+#         print("D")
+#         super().__init__()
+#
+#
+#
+# d = D()

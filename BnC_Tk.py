@@ -103,8 +103,7 @@ class Game():
         # self.initial_main_width = 470
 
 
-        self.users_window_width = 440
-        self.users_window_height = 180
+
         self.restore_window_width = 350
         self.restore_window_height = 180
 
@@ -637,7 +636,7 @@ class Game():
             self.show_messagebox(self.main_win, ret_msg)
             exit()
         elif ret_msg.is_warning():
-            self.game.admin_needed = True
+            self.admin_needed = True
 
     @staticmethod
     def prepare_db():
@@ -661,14 +660,67 @@ class Game():
         if not r0:
             return ResponseMsg("Please create admin user", "warning")
 
+class AdditionalWindowMethods():
+    def open_users_window(self):
+        users_window = UsersWindow(self)
+        #self.current_window = self.users_window
+        users_window.title("Manage user profiles")
+        users_window.geometry(str(UsersWindow.width) + 'x' + str(UsersWindow.height))
+        users_window.resizable(0, 0)
+        users_window.login_lb = Label(users_window, text='Login:', font='arial 8')
+        users_window.login_lb.place(x=10, y=36)
+        users_window.login_en = Entry(users_window, width=20, font='Arial 8', state='normal')
+        users_window.login_en.place(x=68, y=36)
+        users_window.pass_lb1 = Label(users_window, text='Password:', font='arial 8')
+        users_window.pass_lb1.place(x=10, y=57)
+        users_window.password_en1 = Entry(users_window, width=20, show="*", font='Arial 8', state='normal')
+        users_window.password_en1.place(x=68, y=57)
+        users_window.password_lb2 = Label(users_window, text='Password:', font='arial 8')
+        users_window.password_lb2.place(x=10, y=78)
+        users_window.password_en2 = Entry(users_window, width=20, show="*", font='Arial 8', state='normal')
+        users_window.password_en2.place(x=68, y=78)
+        users_window.firstname_lb = Label(users_window, text='First name:', font='arial 8')
+        users_window.firstname_lb.place(x=200 + 40, y=36)
+        users_window.firstname_en = Entry(users_window, width=20, font='Arial 8', state='normal')
+        users_window.firstname_en.place(x=260 + 40, y=36)
+        users_window.lastname_lb = Label(users_window, text='Last name:', font='arial 8')
+        users_window.lastname_lb.place(x=200 + 40, y=57)
+        users_window.lastname_en = Entry(users_window, width=20, font='Arial 8', state='normal')
+        users_window.lastname_en.place(x=260 + 40, y=57)
+        users_window.email_lb = Label(users_window, text='E-mail:', font='arial 8')
+        users_window.email_lb.place(x=200 + 40, y=78)
+        users_window.email_en = Entry(users_window, width=20, font='Arial 8', state='normal')
+        users_window.email_en.place(x=260 + 40, y=78)
+        users_window.create_bt = Button(users_window, text='Create', font='arial 10',
+                                             command=users_window.create_user_eh)
+        users_window.create_bt.place(x=90, y=135)
+        users_window.modify_bt = Button(users_window, text='Modify', font='arial 10',
+                                             command=users_window.modify_user_eh)
+        users_window.modify_bt.place(x=190, y=135)
+        users_window.delete_bt = Button(users_window, text='Delete', font='arial 10',
+                                             command=users_window.delete_user_eh)
+        users_window.delete_bt.place(x=280, y=135)
+        users_window.show_pass_bt = Button(users_window, text='O_O', font='arial 6',
+                                                command=users_window.show_password)
+        users_window.show_pass_bt.place(x=195, y=60)
+        if isinstance(self, LoginWindow):
+            users_window.delete_bt["state"] = "disabled"
+            users_window.modify_bt["state"] = "disabled"
+        else:
+            users_window.load_logged_user_info()
+        users_window.transient(self)
+        users_window.grab_set()
+        users_window.focus_set()
+        users_window.protocol('WM_DELETE_WINDOW', users_window.close)
 
 
-
-class LoginWindow(tkinter.Toplevel):
+class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
+    width = 360
+    height = 180
     def __init__(self, parent_window):
         super().__init__(parent_window)
-        self.login_window_width = 360
-        self.login_window_height = 180
+        # self.login_window_width = 360
+        # self.login_window_height = 180
 
     def authenticate_user_eh(self):
         login = self.login_entry.get()
@@ -765,18 +817,129 @@ class LoginWindow(tkinter.Toplevel):
         self.send_pincode(email)
 
 
-class UserWindow(tkinter.Toplevel):
-    def __init__(self):
-        super().__init__()
+class UsersWindow(Toplevel):
+    width = 440
+    height = 180
+    def __init__(self, parent_window):
+        super().__init__(parent_window)
+        self.parent_window = parent_window
 
     def close(self):
-        if self.login_window.state() == "normal":
-            self.login_window.grab_set()
-            self.login_window.focus_set()
+        self.grab_release()
         self.destroy()
+        self.parent_window.grab_set()
+        self.parent_window.focus_set()
+
+    def load_logged_user_info(self):
+        try:
+            session = Game.get_db_session()
+            r = session.query(BnCUsers).filter_by(login=self.loggedin_user).first()
+            session.close()
+        except Exception as err:
+            session.rollback()
+            return ResponseMsg(str(err), "error")
+        match = re.search(r"firstname=\'(.*)\', lastname=\'(.*)\', email=\'(.*?)\'", str(r))
+        login = self.loggedin_user
+        firstname = match.group(1)
+        lastname = match.group(2)
+        email = match.group(3)
+        self.login_en.insert(0, login)
+        self.firstname_en.insert(0, firstname)
+        self.lastname_en.insert(0, lastname)
+        self.email_en.insert(0, email)
+
+    def show_password(self):
+        if self.password_en1["show"] == "*":
+            self.password_en1["show"] = ""
+            self.password_en2["show"] = ""
+        else:
+            self.password_en1["show"] = "*"
+            self.password_en2["show"] = "*"
+
+    def create_user_eh(self):
+        login = self.login_en.get()
+        password1 = self.password_en1.get()
+        password2 = self.password_en2.get()
+        firstname = self.firstname_en.get()
+        lastname = self.astname_en.get()
+        email = self.email_en.get()
+        if self.loggedin_user and not self.apply_privileges("create", False):
+            self.show_messagebox(self.users_window, ResponseMsg("You have no right to create a user", "error"))
+            return
+        r_msg = self.validate_user(login, password1, password2, firstname, lastname, email, op="create")
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+            return
+        r_msg = self.add_user(login, password1, firstname, lastname, email)
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+            return
+        self.users_window_login_en.delete(0, 'end')
+        self.password_en1.delete(0, 'end')
+        self.password_en2.delete(0, 'end')
+        self.users_window_firstname_en.delete(0, 'end')
+        self.users_window_lastname_en.delete(0, 'end')
+        self.users_window_email_en.delete(0, 'end')
+        r_msg = self.create_user_privileges(login)
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+            return
+        self.show_messagebox(self.users_window, ResponseMsg("User successfully created", "info"))
+
+    def delete_user_eh(self):
+        login = self.users_window_login_en.get()
+        login = login.strip().lower()
+        if self.loggedin_user and not self.apply_privileges("delete", login == self.loggedin_user):
+            self.show_messagebox(self.users_window, ResponseMsg("You have no right to delete the user", "error"))
+            return
+        r_msg = self.validate_user(login, op="other")
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+            return
+        r_msg = self.delete_user(login)
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+            return
+        self.users_window_login_en.delete(0, 'end')
+        self.password_en1.delete(0, 'end')
+        self.password_en2.delete(0, 'end')
+        self.users_window_firstname_en.delete(0, 'end')
+        self.users_window_lastname_en.delete(0, 'end')
+        self.users_window_email_en.delete(0, 'end')
+        r_msg = self.delete_user_privileges(login)
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+        self.show_messagebox(self.users_window, ResponseMsg("User successfully deleted", "info"))
+
+    def modify_user_eh(self):
+        login = self.users_window_login_en.get()
+        login = login.strip().lower()
+        password1 = self.password_en1.get()
+        password2 = self.password_en2.get()
+        firstname = self.users_window_firstname_en.get()
+        lastname = self.users_window_lastname_en.get()
+        email = self.users_window_email_en.get()
+        if self.loggedin_user and not self.apply_privileges("modify", login == self.loggedin_user):
+            self.show_messagebox(self.users_window, ResponseMsg("You have no right to modify the user", "error"))
+            return
+        r_msg = self.validate_user(login, password1, password2, firstname, lastname, email, op="modify")
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+            return
+        r_msg = self.modify_user(login, password1, firstname, lastname, email, only_password=False)
+        if r_msg:
+            self.show_messagebox(self.users_window, r_msg)
+            return
+        self.users_window_login_en.delete(0, 'end')
+        self.password_en1.delete(0, 'end')
+        self.password_en2.delete(0, 'end')
+        self.users_window_firstname_en.delete(0, 'end')
+        self.users_window_lastname_en.delete(0, 'end')
+        self.users_window_email_en.delete(0, 'end')
+        self.show_messagebox(self.users_window, ResponseMsg("User successfully modified", "info"))
 
 
-class MainWin(Tk):
+class MainWin(Tk, AdditionalWindowMethods):
     def __init__(self):
         super().__init__()
         self.initial_main_height = 200
@@ -867,10 +1030,10 @@ class MainWin(Tk):
         self.help_window.geometry('280x90')
         self.automate_answer()
 
-    def show_login_window(self):
+    def open_login_window(self):
         login_window = LoginWindow(self)
-        login_window_width = login_window.login_window_width
-        login_window_height = login_window.login_window_height
+        login_window_width = login_window.width
+        login_window_height = login_window.height
         login_window.main_win = self
         login_window.game = self.game
         login_window.geometry(str(login_window_width) + 'x' + str(login_window_height))
@@ -881,8 +1044,8 @@ class MainWin(Tk):
         login_window.label0.place(x=40, y=10)
         login_window.login_lb = Label(login_window, text='Login:', font='Arial 10')
         login_window.login_lb.place(x=10, y=40)
-        login_window.login_entr = Entry(login_window, width=25, font='Arial 10', state='normal')
-        login_window.login_entr.place(x=100, y=40)
+        login_window.login_entry = Entry(login_window, width=25, font='Arial 10', state='normal')
+        login_window.login_entry.place(x=100, y=40)
         login_window.passwod_lb = Label(login_window, text='Password:', font='arial 10')
         login_window.passwod_lb.place(x=10, y=80)
         login_window.passwod_entry = Entry(login_window, width=25, font='Arial 10', show='*', state='normal')
@@ -891,7 +1054,7 @@ class MainWin(Tk):
                                            command=login_window.authenticate_user_eh)
         login_window.login_button.place(x=30, y=120)
         login_window.new_user_button = Button(login_window, text='New user...', font='arial 10',
-                                              command=self.open_users_window)
+                                              command=login_window.open_users_window)
         login_window.new_user_button.place(x=90, y=120)
         login_window.recovery_button = Button(login_window, text='Reset password...', font='arial 6',
                                               command=login_window.open_restore_password_window)
@@ -1022,168 +1185,6 @@ class MainWin(Tk):
         self.setting_window.focus_set()
         # self.window.wait_window()
 
-    def open_users_window(self):
-        self.users_window = tkinter.Toplevel(self.main_win)
-        self.current_window = self.users_window
-        self.users_window.title("Manage user profiles")
-        self.users_window.geometry(str(self.users_window_width) + 'x' + str(self.users_window_height))
-        self.users_window.resizable(0, 0)
-        if self.login_window.state() == 'normal' and not self.loggedin_user:
-            self.users_window.wm_attributes('-topmost', 'yes')
-            self.login_window.grab_release()
-        self.users_window_login_lb = Label(self.users_window, text='Login:', font='arial 8')
-        self.users_window_login_lb.place(x=10, y=36)
-        self.users_window_login_en = Entry(self.users_window, width=20, font='Arial 8', state='normal')
-        self.users_window_login_en.place(x=68, y=36)
-        self.users_window_pass_lb1 = Label(self.users_window, text='Password:', font='arial 8')
-        self.users_window_pass_lb1.place(x=10, y=57)
-        self.password_en1 = Entry(self.users_window, width=20, show="*", font='Arial 8', state='normal')
-        self.password_en1.place(x=68, y=57)
-        self.users_window_pass_lb2 = Label(self.users_window, text='Password:', font='arial 8')
-        self.users_window_pass_lb2.place(x=10, y=78)
-        self.password_en2 = Entry(self.users_window, width=20, show="*", font='Arial 8', state='normal')
-        self.password_en2.place(x=68, y=78)
-        self.users_window_firstname_lb = Label(self.users_window, text='First name:', font='arial 8')
-        self.users_window_firstname_lb.place(x=200 + 40, y=36)
-        self.users_window_firstname_en = Entry(self.users_window, width=20, font='Arial 8', state='normal')
-        self.users_window_firstname_en.place(x=260 + 40, y=36)
-        self.users_window_lastname_lb = Label(self.users_window, text='Last name:', font='arial 8')
-        self.users_window_lastname_lb.place(x=200 + 40, y=57)
-        self.users_window_lastname_en = Entry(self.users_window, width=20, font='Arial 8', state='normal')
-        self.users_window_lastname_en.place(x=260 + 40, y=57)
-        self.users_window_email_lb = Label(self.users_window, text='E-mail:', font='arial 8')
-        self.users_window_email_lb.place(x=200 + 40, y=78)
-        self.users_window_email_en = Entry(self.users_window, width=20, font='Arial 8', state='normal')
-        self.users_window_email_en.place(x=260 + 40, y=78)
-        self.users_window_create_bt = Button(self.users_window, text='Create', font='arial 10',
-                                             command=self.create_user_eh)
-        self.users_window_create_bt.place(x=90, y=135)
-        self.users_window_modify_bt = Button(self.users_window, text='Modify', font='arial 10',
-                                             command=self.modify_user_eh)
-        self.users_window_modify_bt.place(x=190, y=135)
-        self.users_window_delete_bt = Button(self.users_window, text='Delete', font='arial 10',
-                                             command=self.delete_user_eh)
-        self.users_window_delete_bt.place(x=280, y=135)
-        self.users_window_show_pass_bt = Button(self.users_window, text='O_O', font='arial 6',
-                                                command=self.show_password)
-        self.users_window_show_pass_bt.place(x=195, y=60)
-        if not self.loggedin_user:
-            self.users_window_delete_bt["state"] = "disabled"
-            self.users_window_modify_bt["state"] = "disabled"
-        else:
-            self.load_logged_user_info()
-        self.users_window.transient(self.main_win)
-        self.users_window.grab_set()
-        self.users_window.focus_set()
-        self.users_window.protocol('WM_DELETE_WINDOW', self.close)
-
-    def load_logged_user_info(self):
-        try:
-            session = Game.get_db_session()
-            r = session.query(BnCUsers).filter_by(login=self.loggedin_user).first()
-            session.close()
-        except Exception as err:
-            session.rollback()
-            return ResponseMsg(str(err), "error")
-        match = re.search(r"firstname=\'(.*)\', lastname=\'(.*)\', email=\'(.*?)\'", str(r))
-        login = self.loggedin_user
-        firstname = match.group(1)
-        lastname = match.group(2)
-        email = match.group(3)
-        self.users_window_login_en.insert(0, login)
-        self.users_window_firstname_en.insert(0, firstname)
-        self.users_window_lastname_en.insert(0, lastname)
-        self.users_window_email_en.insert(0, email)
-
-    def show_password(self):
-        if self.password_en1["show"] == "*":
-            self.password_en1["show"] = ""
-            self.password_en2["show"] = ""
-        else:
-            self.password_en1["show"] = "*"
-            self.password_en2["show"] = "*"
-
-    def create_user_eh(self):
-        login = self.users_window_login_en.get()
-        password1 = self.password_en1.get()
-        password2 = self.password_en2.get()
-        firstname = self.users_window_firstname_en.get()
-        lastname = self.users_window_lastname_en.get()
-        email = self.users_window_email_en.get()
-        if self.loggedin_user and not self.apply_privileges("create", False):
-            self.show_messagebox(self.users_window, ResponseMsg("You have no right to create a user", "error"))
-            return
-        r_msg = self.validate_user(login, password1, password2, firstname, lastname, email, op="create")
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-            return
-        r_msg = self.add_user(login, password1, firstname, lastname, email)
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-            return
-        self.users_window_login_en.delete(0, 'end')
-        self.password_en1.delete(0, 'end')
-        self.password_en2.delete(0, 'end')
-        self.users_window_firstname_en.delete(0, 'end')
-        self.users_window_lastname_en.delete(0, 'end')
-        self.users_window_email_en.delete(0, 'end')
-        r_msg = self.create_user_privileges(login)
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-            return
-        self.show_messagebox(self.users_window, ResponseMsg("User successfully created", "info"))
-
-    def delete_user_eh(self):
-        login = self.users_window_login_en.get()
-        login = login.strip().lower()
-        if self.loggedin_user and not self.apply_privileges("delete", login == self.loggedin_user):
-            self.show_messagebox(self.users_window, ResponseMsg("You have no right to delete the user", "error"))
-            return
-        r_msg = self.validate_user(login, op="other")
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-            return
-        r_msg = self.delete_user(login)
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-            return
-        self.users_window_login_en.delete(0, 'end')
-        self.password_en1.delete(0, 'end')
-        self.password_en2.delete(0, 'end')
-        self.users_window_firstname_en.delete(0, 'end')
-        self.users_window_lastname_en.delete(0, 'end')
-        self.users_window_email_en.delete(0, 'end')
-        r_msg = self.delete_user_privileges(login)
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-        self.show_messagebox(self.users_window, ResponseMsg("User successfully deleted", "info"))
-
-    def modify_user_eh(self):
-        login = self.users_window_login_en.get()
-        login = login.strip().lower()
-        password1 = self.password_en1.get()
-        password2 = self.password_en2.get()
-        firstname = self.users_window_firstname_en.get()
-        lastname = self.users_window_lastname_en.get()
-        email = self.users_window_email_en.get()
-        if self.loggedin_user and not self.apply_privileges("modify", login == self.loggedin_user):
-            self.show_messagebox(self.users_window, ResponseMsg("You have no right to modify the user", "error"))
-            return
-        r_msg = self.validate_user(login, password1, password2, firstname, lastname, email, op="modify")
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-            return
-        r_msg = self.modify_user(login, password1, firstname, lastname, email, only_password=False)
-        if r_msg:
-            self.show_messagebox(self.users_window, r_msg)
-            return
-        self.users_window_login_en.delete(0, 'end')
-        self.password_en1.delete(0, 'end')
-        self.password_en2.delete(0, 'end')
-        self.users_window_firstname_en.delete(0, 'end')
-        self.users_window_lastname_en.delete(0, 'end')
-        self.users_window_email_en.delete(0, 'end')
-        self.show_messagebox(self.users_window, ResponseMsg("User successfully modified", "info"))
 
 
 
@@ -1231,6 +1232,7 @@ class MessageBox(Tk):
         messagebox.focus_set()
 
 
+
 class ResponseMsg:
     def __init__(self, msg_text, msg_type):
         self.msg_text = msg_text
@@ -1266,6 +1268,7 @@ class ResponseMsg:
 if __name__ == '__main__':
     game = Game()
     main_win = MainWin()
+    main_win.game = game
     main_win.title("Bulls and Cows Game")
     main_win.geometry(f'{main_win.initial_main_width}x{main_win.initial_main_height}')
     main_win.resizable(0, 0)
@@ -1306,6 +1309,5 @@ if __name__ == '__main__':
     main_win.lb4 = Label(main_win, text="Attempts: " + str(game.attempts), font='arial 8')
     main_win.lb4.pack(fill='none', side='bottom')
     main_win.protocol('WM_DELETE_WINDOW', main_win.close)
-    main_win.game = game
-    main_win.show_login_window()
+    main_win.open_login_window()
     main_win.mainloop()
