@@ -102,8 +102,6 @@ class Game():
         # self.initial_main_height = 200
         # self.initial_main_width = 470
 
-
-
         self.restore_window_width = 350
         self.restore_window_height = 180
 
@@ -297,37 +295,32 @@ class Game():
         self.totqty_resp = totqty_resp
         self.rightplace_resp = rightplace_resp
 
+    @staticmethod
+    def validate_cows_and_bulls(cows_raw, bulls_raw, capacity):
+        if not (cows_raw.isdigit() and bulls_raw.isdigit()):
+            return ResponseMsg("Number of Cows and Bulls must be a digit", "error")
+        cows = int(cows_raw)
+        bulls = int(bulls_raw)
+        if (cows == capacity and bulls == capacity - 1) or (
+                bulls > cows) or bulls > capacity or cows > capacity:
+            return ResponseMsg("Erroneous input combination! Try again!", "error")
 
-    def new_guess(self):
-        game = self.game
-        capacity = game.capacity
-        totqty_resp = game.totqty_resp
-        rightplace_resp = game.rightplace_resp
-        game.rightplace_resp
+    def new_guess(self, totqty_resp, rightplace_resp):
+        capacity = self.capacity
         attempt_set = set()
-        if game.attempts == 0:
-            game.get_new_proposed_str()
-            game.attempts += 1
-            self.change_proposed_str_on_window()
+        if self.attempts == 0:
+            self.get_new_proposed_str()
+            self.attempts += 1
+            # self.change_proposed_str_on_window()
             return
-        if not game.your_string:
-            if not ((self.text1.get()).isdigit() and self.text2.get().isdigit()):
-                return
-            game.totqty_resp = int(self.text1.get())
-            self.text1.delete(0, 'end')
-            game.rightplace_resp = int(self.text2.get())
-            self.text2.delete(0, 'end')
-            totqty_resp = game.totqty_resp
-            rightplace_resp = game.rightplace_resp
-        if (totqty_resp == capacity and rightplace_resp == capacity - 1) or (
-                rightplace_resp > totqty_resp) or rightplace_resp > capacity or totqty_resp > capacity:
-            MessageBox.show_message(self,ResponseMsg(
-                "Erroneous input combination! Try again!","error"))
-            return #continue
-        game.proposed_strings_list.append((game.proposed_str, totqty_resp, rightplace_resp))
+        r_msg = self.validate_cows_and_bulls(totqty_resp, rightplace_resp, capacity)
+        if r_msg:
+            return r_msg
+        totqty_resp = int(totqty_resp)
+        rightplace_resp = int(rightplace_resp)
+        self.proposed_strings_list.append((self.proposed_str, totqty_resp, rightplace_resp))
         if totqty_resp == capacity and rightplace_resp == capacity:
-            self.finish_game(len(game.previous_all_set), 'YAHOO!!! I Did it! Attempts: ' + str(game.attempts), '#00f')
-            return
+            return ResponseMsg("", "finished successfully")
         if totqty_resp == 0 and rightplace_resp == 0:
             for a in self.proposed_str:
                 self.available_digits_str = self.available_digits_str.replace(a, '')
@@ -376,8 +369,6 @@ class Game():
         self.attempts += 1
         self.change_proposed_str_on_window()
 
-
-
     @staticmethod
     def add_user(*args):
         login, password, firstname, lastname, email = args
@@ -401,7 +392,6 @@ class Game():
         except Exception as err:
             session.rollback()
             return ResponseMsg(str(err), "error")
-
 
     @staticmethod
     def modify_user(*args, only_password):
@@ -662,10 +652,11 @@ class Game():
         if not r0:
             return ResponseMsg("Please create admin user", "warning")
 
+
 class AdditionalWindowMethods():
     def open_users_window(self):
         users_window = UsersWindow(self)
-        #self.current_window = self.users_window
+        # self.current_window = self.users_window
         users_window.title("Manage user profiles")
         users_window.geometry(str(UsersWindow.width) + 'x' + str(UsersWindow.height))
         users_window.resizable(0, 0)
@@ -694,16 +685,16 @@ class AdditionalWindowMethods():
         users_window.email_en = Entry(users_window, width=20, font='Arial 8', state='normal')
         users_window.email_en.place(x=260 + 40, y=78)
         users_window.create_bt = Button(users_window, text='Create', font='arial 10',
-                                             command=users_window.create_user_eh)
+                                        command=users_window.create_user_eh)
         users_window.create_bt.place(x=90, y=135)
         users_window.modify_bt = Button(users_window, text='Modify', font='arial 10',
-                                             command=users_window.modify_user_eh)
+                                        command=users_window.modify_user_eh)
         users_window.modify_bt.place(x=190, y=135)
         users_window.delete_bt = Button(users_window, text='Delete', font='arial 10',
-                                             command=users_window.delete_user_eh)
+                                        command=users_window.delete_user_eh)
         users_window.delete_bt.place(x=280, y=135)
         users_window.show_pass_bt = Button(users_window, text='O_O', font='arial 6',
-                                                command=users_window.show_password)
+                                           command=users_window.show_password)
         users_window.show_pass_bt.place(x=195, y=60)
         if isinstance(self, LoginWindow):
             users_window.delete_bt["state"] = "disabled"
@@ -719,6 +710,7 @@ class AdditionalWindowMethods():
 class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
     width = 360
     height = 180
+
     def __init__(self, parent_window):
         super().__init__(parent_window)
         # self.login_window_width = 360
@@ -732,7 +724,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
             MessageBox.show_message(self, r_msg)
             return
         self.game.loggedin_user = login
-        r_msg = Game.retrieve_user_privileges(Game,login)
+        r_msg = Game.retrieve_user_privileges(Game, login)
         if r_msg:
             MessageBox.show_message(self, r_msg)
             return
@@ -745,7 +737,6 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         self.main_win.wm_attributes('-topmost', 'yes')
         self.main_win.grab_set()
         self.main_win.focus_set()
-
 
     def change_password_eh(self):
         """
@@ -822,6 +813,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
 class UsersWindow(Toplevel):
     width = 440
     height = 180
+
     def __init__(self, parent_window):
         super().__init__(parent_window)
         self.parent_window = parent_window
@@ -971,7 +963,16 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.text1['state'] = 'normal'
         self.text2['state'] = 'normal'
         game.game_started = True
-        game.new_guess()
+        r_msg = game.new_guess(self.text1.get(), self.text2.get())
+        if r_msg.type() == "finished successfully":
+            self.finish_game_(True)
+            game.drop_to_start()
+            return
+        if r_msg:
+            MessageBox.show_message(self, r_msg)
+            return
+
+        self.change_proposed_str_on_window()
 
     def verify_pincode_eh(self):
         entered_pincode = self.restore_window_pc_en.get()
@@ -1016,7 +1017,15 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.fr0.pack_forget()
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
 
-
+    def drop_to_start(self):
+        self.totqty_resp = None
+        self.rightplace_resp = None
+        self.your_string = None
+        self.game_started = False
+        self.available_digits_str = '0123456789'
+        self.proposed_str = ''
+        self.previous_all_set.clear()
+        self.attempts = 0
 
     def open_login_window(self):
         login_window = LoginWindow(self)
@@ -1055,10 +1064,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         login_window.focus_set()
         login_window.protocol("WM_DELETE_WINDOW", self.close)
 
-
-
-
-
     @staticmethod
     def disable_event():
         pass
@@ -1066,16 +1071,25 @@ class MainWin(Tk, AdditionalWindowMethods):
     def donothing(self):
         pass
 
-
-
     def finish_game(self, set_size, label_text, label_color):
-        self.reset_to_initials()
+        # self.drop_to_start()
         self.lb3_['text'] = "Previous set: " + str(set_size)
         self.lb0['text'] = label_text
         self.lb0['fg'] = label_color
         self.button['text'] = 'Play again!'
         self.new_game_requested = True
         self.add_item_to_history_frame()
+        # 'YAHOO!!! I Did it! Attempts: ' + str(game.attempts), '#00f'
+
+    def finish_game_(self, label_text, label_color): #continue from this
+        # self.drop_to_start()
+        self.lb3_['text'] = "Previous set: " + str(set_size)
+        self.lb0['text'] = label_text
+        self.lb0['fg'] = label_color
+        self.button['text'] = 'Play again!'
+        self.new_game_requested = True
+        self.add_item_to_history_frame()
+        # 'YAHOO!!! I Did it! Attempts: ' + str(game.attempts), '#00f'
 
     def change_proposed_str_on_window(self):
         self.lb0['text'] = 'I guess your number is : "' + self.game.proposed_str + '" Enter your answer:'
@@ -1112,8 +1126,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         about_window.grab_set()
         about_window.focus_set()
         about_window.wait_window()
-
-
 
     def get_capacity(self):
         if not (self.setting_window_cap_en.get()).isdigit():
@@ -1170,6 +1182,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.setting_window.focus_set()
         # self.window.wait_window()
 
+
 class AboutWindow(Toplevel):
     def __init__(self, parent_window):
         super().__init__(parent_window)
@@ -1203,9 +1216,10 @@ class AboutWindow(Toplevel):
     def automate_answer(self):
         game = self.game
         while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
-            self.button_clicked() #continue fromm this point
+            self.button_clicked()  # continue fromm this point
             self.calc_bulls_and_cows()
         self.button_clicked()
+
 
 class MessageBox(Tk):
     max_messagebox_width = 470
@@ -1220,6 +1234,7 @@ class MessageBox(Tk):
         def myclose():
             parent_window.grab_set()
             messagebox.destroy()
+
         # parent_window.grab_release()
         text = str(msg.get_text())
         msg_len = len(text)
@@ -1235,7 +1250,7 @@ class MessageBox(Tk):
                 new_line_num += 1
                 result_str += "\n" + c
         max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
-                                                                        reverse=True)[0])) * 10
+                                                                                   reverse=True)[0])) * 10
         max_messagebox_height = new_line_num * 20 + 20
         messagebox = tkinter.Toplevel(parent_window)
         messagebox.title(msg.get_type())
@@ -1249,7 +1264,6 @@ class MessageBox(Tk):
         messagebox.transient(parent_window)
         messagebox.grab_set()
         messagebox.focus_set()
-
 
 
 class ResponseMsg:
@@ -1280,8 +1294,6 @@ class ResponseMsg:
             return True
         else:
             return False
-
-
 
 
 if __name__ == '__main__':
