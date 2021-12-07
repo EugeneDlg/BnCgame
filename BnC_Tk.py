@@ -299,30 +299,36 @@ class Game():
 
 
     def new_guess(self):
+        game = self.game
+        capacity = game.capacity
+        totqty_resp = game.totqty_resp
+        rightplace_resp = game.rightplace_resp
+        game.rightplace_resp
         attempt_set = set()
-        if self.attempts == 0:
-            self.get_new_proposed_str()
-            self.attempts += 1
+        if game.attempts == 0:
+            game.get_new_proposed_str()
+            game.attempts += 1
             self.change_proposed_str_on_window()
             return
-        if not self.your_string:
+        if not game.your_string:
             if not ((self.text1.get()).isdigit() and self.text2.get().isdigit()):
                 return
-            self.totqty_resp = int(self.text1.get())
+            game.totqty_resp = int(self.text1.get())
             self.text1.delete(0, 'end')
-            self.rightplace_resp = int(self.text2.get())
+            game.rightplace_resp = int(self.text2.get())
             self.text2.delete(0, 'end')
-        if (self.totqty_resp == self.capacity and self.rightplace_resp == self.capacity - 1) or (
-                self.rightplace_resp > self.totqty_resp) or self.rightplace_resp > self.capacity or self.totqty_resp > self.capacity:
-            self.lb0[
-                'text'] = 'Erroneous input combination! Try again!\nI guess your number is : "' + self.proposed_str + '" Enter your answer:'
-            self.lb0['fg'] = '#000'
+            totqty_resp = game.totqty_resp
+            rightplace_resp = game.rightplace_resp
+        if (totqty_resp == capacity and rightplace_resp == capacity - 1) or (
+                rightplace_resp > totqty_resp) or rightplace_resp > capacity or totqty_resp > capacity:
+            MessageBox.show_message(self,ResponseMsg(
+                "Erroneous input combination! Try again!","error"))
+            return #continue
+        game.proposed_strings_list.append((game.proposed_str, totqty_resp, rightplace_resp))
+        if totqty_resp == capacity and rightplace_resp == capacity:
+            self.finish_game(len(game.previous_all_set), 'YAHOO!!! I Did it! Attempts: ' + str(game.attempts), '#00f')
             return
-        self.proposed_strings_list.append((self.proposed_str, self.totqty_resp, self.rightplace_resp))
-        if self.totqty_resp == self.capacity and self.rightplace_resp == self.capacity:
-            self.finish_game(len(self.previous_all_set), 'YAHOO!!! I Did it! Attempts: ' + str(self.attempts), '#00f')
-            return
-        if self.totqty_resp == 0 and self.rightplace_resp == 0:
+        if totqty_resp == 0 and rightplace_resp == 0:
             for a in self.proposed_str:
                 self.available_digits_str = self.available_digits_str.replace(a, '')
             if len(self.previous_all_set) > 0:
@@ -370,11 +376,7 @@ class Game():
         self.attempts += 1
         self.change_proposed_str_on_window()
 
-    def automate_answer(self):
-        while not (self.totqty_resp == self.capacity and self.rightplace_resp == self.capacity):
-            self.button_clicked()
-            self.calc_bulls_and_cows()
-        self.button_clicked()
+
 
     @staticmethod
     def add_user(*args):
@@ -730,7 +732,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
             MessageBox.show_message(self, r_msg)
             return
         self.game.loggedin_user = login
-        r_msg = Game.retrieve_user_privileges(login)
+        r_msg = Game.retrieve_user_privileges(Game,login)
         if r_msg:
             MessageBox.show_message(self, r_msg)
             return
@@ -954,21 +956,22 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.text2 = None
 
     def button_clicked(self):
-        if self.new_game_requested:
-            self.new_game_requested = False
+        game = self.game
+        if game.new_game_requested:
+            game.new_game_requested = False
             self.new_game()
             self.button['text'] = "OK! Go on!"
-            self.lb0['text'] = "Think of a number with " + str(self.capacity) + " unique digits!"
+            self.lb0['text'] = "Think of a number with " + str(game.capacity) + " unique digits!"
             self.lb0['font'] = 'arial 12'
             self.lb0['fg'] = '#0d0'
-            self.lb4['text'] = "Attempts: " + str(self.attempts)
+            self.lb4['text'] = "Attempts: " + str(game.attempts)
             return
-        self.lb3_['text'] = "Previous set: " + str(len(self.previous_all_set))
-        self.lb4['text'] = 'Attempts: ' + str(self.attempts)
+        self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
+        self.lb4['text'] = 'Attempts: ' + str(game.attempts)
         self.text1['state'] = 'normal'
         self.text2['state'] = 'normal'
-        self.game_started = True
-        self.new_guess()
+        game.game_started = True
+        game.new_guess()
 
     def verify_pincode_eh(self):
         entered_pincode = self.restore_window_pc_en.get()
@@ -1013,22 +1016,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.fr0.pack_forget()
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
 
-    def input_your_string(self, event):
-        if self.game_started or self.new_game_requested: return
-        if not self.your_string_entry:
-            self.help_window.geometry('280x110')
-            self.your_string_entry = Entry(self.help_window, width=6, font='Arial 8', state='normal')
-            self.your_string_entry.place(x=112, y=81)
-            return
-        self.your_string = self.your_string_entry.get()
-        if not self.validate_your_string(self.your_string):
-            self.your_string = None
-            return
-        self.your_string_entry.delete(0, 'end')
-        self.your_string_entry.destroy()
-        self.your_string_entry = None
-        self.help_window.geometry('280x90')
-        self.automate_answer()
+
 
     def open_login_window(self):
         login_window = LoginWindow(self)
@@ -1046,10 +1034,10 @@ class MainWin(Tk, AdditionalWindowMethods):
         login_window.login_lb.place(x=10, y=40)
         login_window.login_entry = Entry(login_window, width=25, font='Arial 10', state='normal')
         login_window.login_entry.place(x=100, y=40)
-        login_window.passwod_lb = Label(login_window, text='Password:', font='arial 10')
-        login_window.passwod_lb.place(x=10, y=80)
-        login_window.passwod_entry = Entry(login_window, width=25, font='Arial 10', show='*', state='normal')
-        login_window.passwod_entry.place(x=100, y=80)
+        login_window.password_lb = Label(login_window, text='Password:', font='arial 10')
+        login_window.password_lb.place(x=10, y=80)
+        login_window.password_entry = Entry(login_window, width=25, font='Arial 10', show='*', state='normal')
+        login_window.password_entry.place(x=100, y=80)
         login_window.login_button = Button(login_window, text='Login', font='arial 10',
                                            command=login_window.authenticate_user_eh)
         login_window.login_button.place(x=30, y=120)
@@ -1090,45 +1078,42 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.add_item_to_history_frame()
 
     def change_proposed_str_on_window(self):
-        self.lb0['text'] = 'I guess your number is : "' + self.proposed_str + '" Enter your answer:'
+        self.lb0['text'] = 'I guess your number is : "' + self.game.proposed_str + '" Enter your answer:'
         self.lb0['fg'] = '#000'
         self.button['text'] = 'OK'
-        self.lb4['text'] = 'Attempts: ' + str(self.attempts)
-        if self.attempts > 1:
+        self.lb4['text'] = 'Attempts: ' + str(self.game.attempts)
+        if self.game.attempts > 1:
             self.add_item_to_history_frame()
 
     def add_item_to_history_frame(self):
-        h = self.initial_main_height + self.string_interval_history_frame * (len(self.proposed_strings_list) - 1)
+        game = self.game
+        h = self.initial_main_height + self.string_interval_history_frame * (len(game.proposed_strings_list) - 1)
         self.fr0.pack(expand='yes')
-        self.main_win.geometry(f'{self.initial_main_width}x{h}')
+        self.geometry(f'{self.initial_main_width}x{h}')
 
-        t0 = self.proposed_strings_list[-1]
+        t0 = game.proposed_strings_list[-1]
         fr0_lb = Label(self.fr0, text=str(t0[0]) + "  " + str(t0[1]) + "." + str(t0[2]), font='arial 9')
         fr0_lb.pack()
         self.proposed_strings_lb_list.append(fr0_lb)
 
     def open_about_window(self):
-        self.help_window = tkinter.Toplevel(self.main_win)
-        self.help_window.geometry('280x90')
-        self.help_window.resizable(0, 0)
-        self.about_lb1 = Label(
-            self.help_window, text='This game is created by Eugene Dolgov. \nAll rights reserved \u00a9 2021.',
+        about_window = AboutWindow(self)
+        about_window.game = self.game
+        about_window.geometry('280x90')
+        about_window.resizable(0, 0)
+        about_window.lb1 = Label(
+            about_window, text='This game is created by Eugene Dolgov. \nAll rights reserved \u00a9 2021.',
             font='arial 10')
-        self.about_lb1.place(x=10, y=10)
-        button = Button(self.help_window, text='OK', command=lambda: self.help_window.destroy())
+        about_window.lb1.place(x=10, y=10)
+        about_window.button = Button(about_window, text='OK', command=lambda: about_window.destroy())
         button.place(x=120, y=50)
-        self.about_lb1.bind("<Double-Button-3>", self.input_your_string)
-        self.help_window.transient(self.main_win)
-        self.help_window.grab_set()
-        self.help_window.focus_set()
-        self.help_window.wait_window()
+        about_window.lb1.bind("<Double-Button-3>", about_window.input_your_string)
+        about_window.transient(self)
+        about_window.grab_set()
+        about_window.focus_set()
+        about_window.wait_window()
 
-    def validate_your_string(self, input_string):
-        if not input_string.isdigit() or len(input_string) != self.capacity or len(set(list(input_string))) != len(
-                list(input_string)):
-            return False
-        else:
-            return True
+
 
     def get_capacity(self):
         if not (self.setting_window_cap_en.get()).isdigit():
@@ -1185,8 +1170,42 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.setting_window.focus_set()
         # self.window.wait_window()
 
+class AboutWindow(Toplevel):
+    def __init__(self, parent_window):
+        super().__init__(parent_window)
+        self.your_string_entry = None
 
+    def input_your_string(self, event):
+        game = self.game
+        if game.game_started or game.new_game_requested: return
+        if not self.your_string_entry:
+            self.geometry('280x110')
+            self.your_string_entry = Entry(self, width=6, font='Arial 8', state='normal')
+            self.your_string_entry.place(x=112, y=81)
+            return
+        game.your_string = self.your_string_entry.get()
+        if not self.validate_your_string(game.your_string):
+            game.your_string = None
+            return
+        self.your_string_entry.delete(0, 'end')
+        self.your_string_entry.destroy()
+        self.your_string_entry = None
+        self.geometry('280x90')
+        self.automate_answer()
 
+    def validate_your_string(self, input_string):
+        if not input_string.isdigit() or len(input_string) != self.game.capacity or len(set(list(input_string))) != len(
+                list(input_string)):
+            return False
+        else:
+            return True
+
+    def automate_answer(self):
+        game = self.game
+        while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
+            self.button_clicked() #continue fromm this point
+            self.calc_bulls_and_cows()
+        self.button_clicked()
 
 class MessageBox(Tk):
     max_messagebox_width = 470
@@ -1215,7 +1234,7 @@ class MessageBox(Tk):
             else:
                 new_line_num += 1
                 result_str += "\n" + c
-        max_messagebox_width = max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
+        max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
                                                                         reverse=True)[0])) * 10
         max_messagebox_height = new_line_num * 20 + 20
         messagebox = tkinter.Toplevel(parent_window)
