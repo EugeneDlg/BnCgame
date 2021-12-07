@@ -331,7 +331,7 @@ class Game():
                             self.previous_all_set.remove(c)
                             break
                 if len(self.previous_all_set) == 0:
-                    self.finish_game(0, "You have broken my mind!!! Think of a new number now!", '#f00')
+                    self.finish_game(0, "You have broken my mind!!! Think of a new number now!", '#f00') #continue from this point
                     return
                 r = random.randint(0, len(self.previous_all_set) - 1)
                 for i, c in enumerate(self.previous_all_set):
@@ -952,11 +952,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         if game.new_game_requested:
             game.new_game_requested = False
             self.new_game()
-            self.button['text'] = "OK! Go on!"
-            self.lb0['text'] = "Think of a number with " + str(game.capacity) + " unique digits!"
-            self.lb0['font'] = 'arial 12'
-            self.lb0['fg'] = '#0d0'
-            self.lb4['text'] = "Attempts: " + str(game.attempts)
             return
         self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
         self.lb4['text'] = 'Attempts: ' + str(game.attempts)
@@ -966,7 +961,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         r_msg = game.new_guess(self.text1.get(), self.text2.get())
         if r_msg.type() == "finished successfully":
             self.finish_game_(True)
-            game.drop_to_start()
             return
         if r_msg:
             MessageBox.show_message(self, r_msg)
@@ -999,16 +993,11 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def new_game_clicked(self):
         if not self.game_started: return
+        self.game.drop_to_start()
         self.new_game()
-        self.button['text'] = "OK! Go on!"
-        self.lb0['text'] = "Think of a number with " + str(self.capacity) + " unique digits!"
-        self.lb0['font'] = 'arial 12'
-        self.lb0['fg'] = '#0d0'
-        self.lb4['text'] = "Attempts: " + str(self.attempts)
 
     def new_game(self):
-        self.reset_to_initials()
-        self.attempts = 0
+        #self.reset_to_initials()
         self.lb3_['text'] = "Previous set: 0"
         for proposed_strings_lb in self.proposed_strings_lb_list:
             proposed_strings_lb.destroy()
@@ -1016,6 +1005,11 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.proposed_strings_list.clear()
         self.fr0.pack_forget()
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
+        self.button['text'] = "OK! Go on!"
+        self.lb0['text'] = "Think of a number with " + str(self.capacity) + " unique digits!"
+        self.lb0['font'] = 'arial 12'
+        self.lb0['fg'] = '#0d0'
+        self.lb4['text'] = "Attempts: " + str(self.attempts)
 
     def drop_to_start(self):
         self.totqty_resp = None
@@ -1071,25 +1065,24 @@ class MainWin(Tk, AdditionalWindowMethods):
     def donothing(self):
         pass
 
-    def finish_game(self, set_size, label_text, label_color):
-        # self.drop_to_start()
-        self.lb3_['text'] = "Previous set: " + str(set_size)
-        self.lb0['text'] = label_text
-        self.lb0['fg'] = label_color
-        self.button['text'] = 'Play again!'
-        self.new_game_requested = True
-        self.add_item_to_history_frame()
-        # 'YAHOO!!! I Did it! Attempts: ' + str(game.attempts), '#00f'
+    # def finish_game(self, set_size, label_text, label_color):
+    #     # self.drop_to_start()
+    #     self.lb3_['text'] = "Previous set: " + str(set_size)
+    #     self.lb0['text'] = label_text
+    #     self.lb0['fg'] = label_color
+    #     self.button['text'] = 'Play again!'
+    #     self.new_game_requested = True
+    #     self.add_item_to_history_frame()
 
-    def finish_game_(self, label_text, label_color): #continue from this
+
+    def finish_game_suc(self, label_text, label_color): #continue from this
         # self.drop_to_start()
         self.lb3_['text'] = "Previous set: " + str(set_size)
-        self.lb0['text'] = label_text
-        self.lb0['fg'] = label_color
+        self.lb0['text'] = "YAHOO!!! I Did it! Attempts: ' + str(game.attempts)"
+        self.lb0['fg'] = '#00f'
         self.button['text'] = 'Play again!'
         self.new_game_requested = True
         self.add_item_to_history_frame()
-        # 'YAHOO!!! I Did it! Attempts: ' + str(game.attempts), '#00f'
 
     def change_proposed_str_on_window(self):
         self.lb0['text'] = 'I guess your number is : "' + self.game.proposed_str + '" Enter your answer:'
@@ -1216,7 +1209,7 @@ class AboutWindow(Toplevel):
     def automate_answer(self):
         game = self.game
         while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
-            self.button_clicked()  # continue fromm this point
+            self.button_clicked()
             self.calc_bulls_and_cows()
         self.button_clicked()
 
