@@ -65,7 +65,7 @@ class Privileges(Base):
 #     pass
 
 
-class Game():
+class Game:
     session = None
     engine = None
     text_for_restoring_password = """\
@@ -102,11 +102,8 @@ class Game():
         # self.initial_main_height = 200
         # self.initial_main_width = 470
 
-        self.restore_window_width = 350
-        self.restore_window_height = 180
-
         self.string_interval_history_frame = 22
-        self.new_game_requested = False
+
         self.game_started = False
         self.loggedin_user = None
         self.admin_needed = False
@@ -331,8 +328,7 @@ class Game():
                             self.previous_all_set.remove(c)
                             break
                 if len(self.previous_all_set) == 0:
-                    self.finish_game(0, "You have broken my mind!!! Think of a new number now!", '#f00') #continue from this point
-                    return
+                    return ResponseMsg("", "finished erroneously")
                 r = random.randint(0, len(self.previous_all_set) - 1)
                 for i, c in enumerate(self.previous_all_set):
                     if i == r: break
@@ -340,7 +336,6 @@ class Game():
             else:
                 self.get_new_proposed_str()
             self.attempts += 1
-            self.change_proposed_str_on_window()
             return
         interim_str = ["V" for a in range(self.capacity)]  # to_do
         init_rest_str = self.available_digits_str
@@ -359,15 +354,13 @@ class Game():
         else:
             self.previous_all_set = attempt_set
         if len(self.previous_all_set) == 0:
-            self.finish_game(0, "You have broken my mind!!! Think of a new number now!", '#f00')
-            return
+            return ResponseMsg("", "finished erroneously")
         r = random.randint(0, len(self.previous_all_set) - 1)
         for i, c in enumerate(self.previous_all_set):
             if i == r:
                 break
         self.proposed_str = c
         self.attempts += 1
-        self.change_proposed_str_on_window()
 
     @staticmethod
     def add_user(*args):
@@ -653,7 +646,7 @@ class Game():
             return ResponseMsg("Please create admin user", "warning")
 
 
-class AdditionalWindowMethods():
+class AdditionalWindowMethods:
     def open_users_window(self):
         users_window = UsersWindow(self)
         # self.current_window = self.users_window
@@ -738,76 +731,58 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         self.main_win.grab_set()
         self.main_win.focus_set()
 
-    def change_password_eh(self):
-        """
 
-        :rtype: object
-        """
-        login = self.login_window_lg_en.get().strip().lower()
-        password1 = self.password_en1.get().strip()
-        password2 = self.password_en2.get().strip()
-        r_msg = Game.validate_password(password1, password2)
-        if r_msg:
-            self.show_messagebox(self.restore_window, ResponseMsg(r_msg, "error"))
-            return
-        r_msg = self.modify_user(login, password1, only_password=True)
-        if r_msg:
-            self.show_messagebox(self.restore_window, r_msg)
-            return
-        self.show_messagebox(self.login_window, ResponseMsg("Password successfully changed", "info"))
-        self.close()
 
     def open_restore_password_window(self):
-        login = self.login_window_lg_en.get().strip().lower()
+        login = self.login_entry.get().strip().lower()
         r_msg = Game.validate_user(login, op="other")
         if r_msg:
-            self.show_messagebox(self.login_window, r_msg)
+            MessageBox.show_message(self, r_msg)
             return
-        user_data = self.get_user_by_login(login)
+        user_data = Game.get_user_by_login(login)
         email = user_data.email
         # self.login_window.wm_attributes('-topmost', 'no')
-        self.login_window.grab_release()
-        self.restore_window = tkinter.Toplevel(self.login_window)
-        self.current_window = self.restore_window
-        self.restore_window.title("Restore password")
-        self.restore_window.geometry(str(self.restore_window_width) + 'x' + str(self.restore_window_height))
-        self.restore_window.resizable(0, 0)
+        self.grab_release()
+        recovery_window = RecoveryPasswordWindow(self)
+        recovery_window.title("Reset password")
+        recovery_window.geometry(str(RecoveryPasswordWindow.width) + 'x' + str(RecoveryPasswordWindow.height))
+        recovery_window.resizable(0, 0)
         # self.restore_window_lb0 = Label(self.restore_window, text='Please click button to send a pin-code to your
         # email',font='arial 9')
-        self.restore_window_lb0 = Label(self.restore_window, text='Please enter a pincode sent to your email:',
-                                        font='arial 9')
-        self.restore_window_lb0.place(x=10, y=10)
-        self.restore_window_pc_en = Entry(self.restore_window, width=6, font='Arial 9', state='normal')
-        self.restore_window_pc_en.place(x=250, y=10)
-        self.restore_window_pc_bt = Button(self.restore_window, text='Ok', font='arial 7',
-                                           command=self.verify_pincode_eh)
-        self.restore_window_pc_bt.place(x=300, y=10)
-        self.restore_window_cp_lb = Label(self.restore_window, text='Please enter a new password:',
-                                          font='arial 9')
-        self.restore_window_cp_lb.place(x=90, y=50)
-        self.restore_window_cp_lb["state"] = "disabled"
-        self.password_en1 = Entry(self.restore_window, width=25, font='Arial 8', show="*", state='normal')
-        self.password_en1.place(x=95, y=70)
-        self.password_en1["state"] = "disabled"
-        self.password_en2 = Entry(self.restore_window, width=25, font='Arial 8', show="*", state='normal')
-        self.password_en2.place(x=95, y=95)
-        self.password_en2["state"] = "disabled"
-        self.restore_window_cp_bt = Button(self.restore_window, text='Change password', font='arial 8',
-                                           command=self.change_password_eh)
-        self.restore_window_cp_bt.place(x=110, y=125)
-        self.restore_window_cp_bt["state"] = "disabled"
-        self.restore_window_show_pass_bt = Button(self.restore_window, text='O_O', font='arial 6',
-                                                  command=self.show_password)
-        self.restore_window_show_pass_bt.place(x=267, y=55)
-        self.restore_window_show_pass_bt["state"] = "disabled"
+        recovery_window.label0 = Label(recovery_window, text='Please enter a pincode sent to your email:',
+                                       font='arial 9')
+        recovery_window.label0.place(x=10, y=10)
+        recovery_window.password_entry = Entry(recovery_window, width=6, font='Arial 9', state='normal')
+        recovery_window.password_entry.place(x=250, y=10)
+        recovery_window.button_pin = Button(recovery_window, text='Ok', font='arial 7',
+                                        command=recovery_window.verify_pincode_eh)
+        recovery_window.button_pin.place(x=300, y=10)
+        recovery_window.label1 = Label(recovery_window, text='Please enter a new password:',
+                                       font='arial 9')
+        recovery_window.label1.place(x=90, y=50)
+        recovery_window.label1["state"] = "disabled"
+        recovery_window.password_entry1 = Entry(recovery_window, width=25, font='Arial 8', show="*", state='normal')
+        recovery_window.password_entry1.place(x=95, y=70)
+        recovery_window.password_entry1["state"] = "disabled"
+        recovery_window.password_entry2 = Entry(recovery_window, width=25, font='Arial 8', show="*", state='normal')
+        recovery_window.password_entry2.place(x=95, y=95)
+        recovery_window.password_entry2["state"] = "disabled"
+        recovery_window.password_button = Button(recovery_window, text='Change password', font='arial 8',
+                                                 command=recovery_window.change_password_eh)
+        recovery_window.password_button.place(x=110, y=125)
+        recovery_window.password_button["state"] = "disabled"
+        recovery_window.show_button = Button(recovery_window, text='O_O', font='arial 6',
+                                             command=recovery_window.show_password)
+        recovery_window.show_button.place(x=267, y=55)
+        recovery_window.show_button["state"] = "disabled"
         # self.restore_window_bt0 = Button(self.restore_window, text='Send code', font='arial 6',
         #                                  command=self.send_pincode_eh)
         # self.restore_window_bt0.place(x=350, y=10)
-        self.restore_window.transient(self.login_window)
-        self.restore_window.grab_set()
-        self.restore_window.focus_set()
-        self.restore_window.protocol("WM_DELETE_WINDOW", self.close)
-        self.send_pincode(email)
+        recovery_window.transient(self)
+        recovery_window.grab_set()
+        recovery_window.focus_set()
+        recovery_window.protocol("WM_DELETE_WINDOW", recovery_window.close)
+        Game.send_pincode(Game, email)
 
 
 class UsersWindow(Toplevel):
@@ -823,6 +798,14 @@ class UsersWindow(Toplevel):
         self.destroy()
         self.parent_window.grab_set()
         self.parent_window.focus_set()
+
+    def show_password(self):
+        if self.password_en1["show"] == "*":
+            self.password_en1["show"] = ""
+            self.password_en2["show"] = ""
+        else:
+            self.password_en1["show"] = "*"
+            self.password_en2["show"] = "*"
 
     def load_logged_user_info(self):
         try:
@@ -841,14 +824,6 @@ class UsersWindow(Toplevel):
         self.firstname_en.insert(0, firstname)
         self.lastname_en.insert(0, lastname)
         self.email_en.insert(0, email)
-
-    def show_password(self):
-        if self.password_en1["show"] == "*":
-            self.password_en1["show"] = ""
-            self.password_en2["show"] = ""
-        else:
-            self.password_en1["show"] = "*"
-            self.password_en2["show"] = "*"
 
     def create_user_eh(self):
         login = self.login_en.get()
@@ -933,6 +908,61 @@ class UsersWindow(Toplevel):
         self.show_messagebox(self.users_window, ResponseMsg("User successfully modified", "info"))
 
 
+class RecoveryPasswordWindow(UsersWindow):
+    width = 350
+    height = 180
+
+    def __init__(self, parent_window):
+        super().__init__(parent_window)
+        self.parent_window = parent_window
+
+    def close(self):
+        self.grab_release()
+        self.destroy()
+        self.parent_window.grab_set()
+        self.parent_window.focus_set()
+
+    def show_password(self):
+        if self.password_en1["show"] == "*":
+            self.password_en1["show"] = ""
+            self.password_en2["show"] = ""
+        else:
+            self.password_en1["show"] = "*"
+            self.password_en2["show"] = "*"
+
+    def change_password_eh(self):
+        """
+
+        :rtype: object
+        """
+        login = self.login_window_lg_en.get().strip().lower()
+        password1 = self.password_en1.get().strip()
+        password2 = self.password_en2.get().strip()
+        r_msg = Game.validate_password(password1, password2)
+        if r_msg:
+            self.show_messagebox(self.restore_window, ResponseMsg(r_msg, "error"))
+            return
+        r_msg = self.modify_user(login, password1, only_password=True)
+        if r_msg:
+            self.show_messagebox(self.restore_window, r_msg)
+            return
+        self.show_messagebox(self.login_window, ResponseMsg("Password successfully changed", "info"))
+        self.close()
+
+    def verify_pincode_eh(self):
+        entered_pincode = self.restore_window_pc_en.get() #continue from this
+        entered_pincode = entered_pincode.strip()
+        r_msg = Game.validate_pincode(entered_pincode, str(self.pincode))
+        if r_msg:
+            self.show_messagebox(self.restore_window, r_msg)
+            return
+        self.restore_window_cp_lb["state"] = "normal"
+        self.password_en1["state"] = "normal"
+        self.password_en2["state"] = "normal"
+        self.restore_window_cp_bt["state"] = "normal"
+        self.restore_window_show_pass_bt["state"] = "normal"
+
+
 class MainWin(Tk, AdditionalWindowMethods):
     def __init__(self):
         super().__init__()
@@ -946,6 +976,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.lb3_ = None
         self.text1 = None
         self.text2 = None
+        self.new_game_requested = False
 
     def button_clicked(self):
         game = self.game
@@ -962,24 +993,13 @@ class MainWin(Tk, AdditionalWindowMethods):
         if r_msg.type() == "finished successfully":
             self.finish_game_(True)
             return
+        elif r_msg.type() == "finished erroneously":
+            self.finish_game_(False)
         if r_msg:
             MessageBox.show_message(self, r_msg)
             return
-
         self.change_proposed_str_on_window()
 
-    def verify_pincode_eh(self):
-        entered_pincode = self.restore_window_pc_en.get()
-        entered_pincode = entered_pincode.strip()
-        r_msg = Game.validate_pincode(entered_pincode, str(self.pincode))
-        if r_msg:
-            self.show_messagebox(self.restore_window, r_msg)
-            return
-        self.restore_window_cp_lb["state"] = "normal"
-        self.password_en1["state"] = "normal"
-        self.password_en2["state"] = "normal"
-        self.restore_window_cp_bt["state"] = "normal"
-        self.restore_window_show_pass_bt["state"] = "normal"
 
     def mouse_function_hide(self, event):
         self.lb3_.pack_forget()
@@ -992,11 +1012,11 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.quit()
 
     def new_game_clicked(self):
-        if not self.game_started: return
+        if not self.game.game_started: return
         self.game.drop_to_start()
-        self.new_game()
+        self.new_game_window()
 
-    def new_game(self):
+    def new_game_window(self):
         #self.reset_to_initials()
         self.lb3_['text'] = "Previous set: 0"
         for proposed_strings_lb in self.proposed_strings_lb_list:
@@ -1075,12 +1095,15 @@ class MainWin(Tk, AdditionalWindowMethods):
     #     self.add_item_to_history_frame()
 
 
-    def finish_game_suc(self, label_text, label_color): #continue from this
-        # self.drop_to_start()
-        self.lb3_['text'] = "Previous set: " + str(set_size)
-        self.lb0['text'] = "YAHOO!!! I Did it! Attempts: ' + str(game.attempts)"
-        self.lb0['fg'] = '#00f'
+    def finish_game_(self, is_successfully):
+        if is_successfully:
+            self.lb0['text'] = "YAHOO!!! I Did it! Attempts: " + str(game.attempts)
+            self.lb0['fg'] = '#00f'
+        else:
+            self.lb0['text'] = "You have broken my mind!!! Think of a new number now!"
+            self.lb0['fg'] = '#f00'
         self.button['text'] = 'Play again!'
+        self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
         self.new_game_requested = True
         self.add_item_to_history_frame()
 
@@ -1183,14 +1206,14 @@ class AboutWindow(Toplevel):
 
     def input_your_string(self, event):
         game = self.game
-        if game.game_started or game.new_game_requested: return
+        if game.game_started or self.new_game_requested: return
         if not self.your_string_entry:
             self.geometry('280x110')
             self.your_string_entry = Entry(self, width=6, font='Arial 8', state='normal')
             self.your_string_entry.place(x=112, y=81)
             return
         game.your_string = self.your_string_entry.get()
-        if not self.validate_your_string(game.your_string):
+        if not Game.validate_your_string(game.your_string):
             game.your_string = None
             return
         self.your_string_entry.delete(0, 'end')
@@ -1211,7 +1234,7 @@ class AboutWindow(Toplevel):
         while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
             self.button_clicked()
             self.calc_bulls_and_cows()
-        self.button_clicked()
+        self.button_clicked() #???
 
 
 class MessageBox(Tk):
