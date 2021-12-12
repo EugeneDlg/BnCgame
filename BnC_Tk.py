@@ -279,7 +279,7 @@ class Game:
                     iter0 -= 1
                 else:
                     if self.rightplace_resp == self.totqty_resp:
-                        populate(interim_str, v_list, attempt_set)
+                        Game.populate(interim_str, v_list, attempt_set)
             if (self.rightplace_resp - 1 <= iter0 < self.totqty_resp - 1) or self.rightplace_resp == 0:
                 for i1 in range(ini1, len(self.proposed_str)):
                     if self.proposed_str[i1] in interim_str: continue
@@ -297,7 +297,7 @@ class Game:
                             interim_str[i2] = 'V'
                         else:
                             interim_str[i2] = self.proposed_str[i1]
-                            populate(interim_str, v_list, attempt_set)
+                            Game.populate(interim_str, v_list, attempt_set)
                             interim_str[i2] = 'V'
             if iter1 == 0:
                 interim_str[i0] = 'V'
@@ -330,13 +330,12 @@ class Game:
         if self.attempts == 0:
             self.get_new_proposed_str()
             self.attempts += 1
-            # self.change_proposed_str_on_window()
             return
         r_msg = self.validate_cows_and_bulls(totqty_resp, rightplace_resp, capacity)
         if r_msg:
             return r_msg
-        totqty_resp = int(totqty_resp)
-        rightplace_resp = int(rightplace_resp)
+        self.totqty_resp = totqty_resp =int(totqty_resp)
+        self.rightplace_resp = rightplace_resp = int(rightplace_resp)
         self.proposed_strings_list.append((self.proposed_str, totqty_resp, rightplace_resp))
         if totqty_resp == capacity and rightplace_resp == capacity:
             return ResponseMsg("", "finished successfully")
@@ -364,11 +363,11 @@ class Game:
         for a in self.proposed_str:
             init_rest_str = init_rest_str.replace(a, '')
         v_list = []
-        if self.capacity - self.totqty_resp > 0:
-            for l in itertools.permutations(init_rest_str, self.capacity - self.totqty_resp):
+        if capacity - totqty_resp > 0:
+            for l in itertools.permutations(init_rest_str, capacity - totqty_resp):
                 v_list.append(''.join(map(str, l)))
-        if self.rightplace_resp > 0:
-            self.get_template(0, 0, 0, 0, self.capacity, interim_str, v_list, attempt_set)
+        if rightplace_resp > 0:
+            self.get_template(0, 0, 0, 0, capacity, interim_str, v_list, attempt_set)
         else:
             self.get_template(0, 0, 0, 0, 1, interim_str, v_list, attempt_set)
         if len(self.previous_all_set) > 0:
@@ -455,7 +454,7 @@ class Game:
     def get_db_session():
         if not Game.session:
             m = re.search(r":([^/].+)@", DB_CONN_STRING)
-            db_conn_string = DB_CONN_STRING.replace(m.group(1), base64_decode_(m.group(1)))
+            db_conn_string = DB_CONN_STRING.replace(m.group(1), Game.base64_decode_(m.group(1)))
             try:
                 Game.engine = create_engine(db_conn_string)
                 DBSession = sessionmaker(bind=Game.engine)
@@ -999,14 +998,14 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.text1['state'] = 'normal'
         self.text2['state'] = 'normal'
         game.game_started = True
-        r_msg = game.new_guess(self.text1.get(), self.text2.get()) #refactor!
-        if r_msg.type() == "finished successfully":
-            self.finish_game_(True)
-            return
-        elif r_msg.type() == "finished erroneously":
-            self.finish_game_(False)
+        r_msg = game.new_guess(self.text1.get(), self.text2.get())
         if r_msg:
-            MessageBox.show_message(self, r_msg)
+            if r_msg.type() == "finished successfully":
+                self.finish_game_(True)
+            elif r_msg.type() == "finished erroneously":
+                self.finish_game_(False)
+            else:
+                MessageBox.show_message(self, r_msg)
             return
         self.change_proposed_str_on_window()
 
@@ -1193,7 +1192,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.cap_entry.delete('0', 'end')
         setting_window.cap_entry.insert('0', self.game.capacity)
         setting_window.upperlabel = self.lb0
-        setting_window.capacity = self.game.capacity
+        setting_window.game = self.game
         if self.game.game_started:
             setting_window.cap_button["state"] = "disabled"
         setting_window.transient(self)
@@ -1202,8 +1201,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         # self.window.wait_window()
 
 class SettingWindow(Toplevel):
-    width = 240
-    height = 140
+    width = 170
+    height = 70
 
     def __init__(self, parent_window):
         super().__init__(parent_window)
@@ -1215,7 +1214,7 @@ class SettingWindow(Toplevel):
         new_capacity = int(new_capacity)
         if new_capacity < 3 or new_capacity > 6:
             return
-        self.capacity = new_capacity
+        self.game.capacity = new_capacity
         #if str(self.lb0['text']).find('Think of a number with') != 1:
         self.upperlabel['text'] = "Think of a number with " + str(new_capacity) + " unique digits!"
         self.upperlabel['fg'] = '#0d0'
@@ -1337,7 +1336,8 @@ class ResponseMsg:
             return False
 
 
-class 
+class UserNotFoundException(Exception):
+    pass
 
 
 if __name__ == '__main__':
