@@ -20,7 +20,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from passlib.context import CryptContext
 
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
-DB_CONN_STRING = "postgresql+psycopg2://postgres:amkiqn3a@127.0.0.1:5432/bnc"
+DB_CONN_STRING = "postgresql+psycopg2://postgres:dFAkc2E3TWw=@127.0.0.1:5432/bnc"
 USERS_TABLE = "users"
 PRIV_TABLE = "privileges"
 ADMIN_USER = "admin"
@@ -161,16 +161,16 @@ class Game:
         # self.login_window_rp_bt = None
 
     @staticmethod
-    def load_logged_user_info():
+    def load_logged_user_info(loggedin_user):
         try:
             session = Game.get_db_session()
-            r = session.query(BnCUsers).filter_by(login=self.loggedin_user).first()
+            r = session.query(BnCUsers).filter_by(login=loggedin_user).first()
             session.close()
         except Exception as err:
             session.rollback()
             return ResponseMsg(str(err), "error")
         # match = re.search(r"firstname=\'(.*)\', lastname=\'(.*)\', email=\'(.*?)\'", str(r))
-        login = self.loggedin_user
+        login = loggedin_user
         firstname = str(r.firstname)
         lastname = str(r.lastname)
         email = str(r.email)
@@ -207,7 +207,7 @@ class Game:
     @staticmethod
     def send_pincode(email, pincode):
         # return
-        password = base64.b64decode("UWV0dTEyMyE=".encode("ascii")).decode("ascii")
+        password = Game.base64_decode_("UWV0dTEyMyE=")
         email_msg = MIMEMultipart("alternative")
         sender_email = BNC_EMAIL
         receiver_email = email
@@ -454,8 +454,10 @@ class Game:
     @staticmethod
     def get_db_session():
         if not Game.session:
+            m = re.search(r":([^/].+)@", DB_CONN_STRING)
+            db_conn_string = DB_CONN_STRING.replace(m.group(1), base64_decode_(m.group(1)))
             try:
-                Game.engine = create_engine(DB_CONN_STRING)
+                Game.engine = create_engine(db_conn_string)
                 DBSession = sessionmaker(bind=Game.engine)
                 Game.session = DBSession()
                 return Game.session
@@ -667,6 +669,9 @@ class Game:
         if not r0:
             return ResponseMsg("Please create admin user", "warning")
 
+    @staticmethod
+    def base64_decode_(encoded_string):
+        return base64.b64decode(encoded_string.encode("ascii")).decode("ascii")
 
 class AdditionalWindowMethods:
     def open_users_window(self):
@@ -716,7 +721,10 @@ class AdditionalWindowMethods:
             users_window.delete_button["state"] = "disabled"
             users_window.modify_button["state"] = "disabled"
         else:
-            user_data = Game.load_logged_user_info()
+            user_data = Game.load_logged_user_info(self.game.loggedin_user)
+            if isinstance(user_data, ResponseMsg):
+                MessageBox.show_message(self, user_data)
+                return
             users_window.login_entry.insert(0, user_data["login"])
             users_window.firstname_entry.insert(0, user_data["firstname"])
             users_window.lastname_entry.insert(0, user_data["lastname"])
@@ -733,6 +741,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
 
     def __init__(self, parent_window):
         super().__init__(parent_window)
+        self.parent_window = parent_window
         # self.login_window_width = 360
         # self.login_window_height = 180
 
@@ -754,9 +763,9 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         MessageBox.show_message(self, ResponseMsg(r_msg, "info"))
         self.grab_release()
         self.withdraw()
-        self.main_win.wm_attributes('-topmost', 'yes')
-        self.main_win.grab_set()
-        self.main_win.focus_set()
+        self.wm_attributes('-topmost', 'yes')
+        self.parent_window.grab_set()
+        self.parent_window.focus_set()
 
 
 
@@ -981,8 +990,8 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def button_clicked(self):
         game = self.game
-        if game.new_game_requested:
-            game.new_game_requested = False
+        if self.new_game_requested:
+            self.new_game_requested = False
             self.new_game()
             return
         self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
@@ -990,7 +999,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.text1['state'] = 'normal'
         self.text2['state'] = 'normal'
         game.game_started = True
-        r_msg = game.new_guess(self.text1.get(), self.text2.get())
+        r_msg = game.new_guess(self.text1.get(), self.text2.get()) #refactor!
         if r_msg.type() == "finished successfully":
             self.finish_game_(True)
             return
@@ -1144,61 +1153,75 @@ class MainWin(Tk, AdditionalWindowMethods):
         about_window.focus_set()
         about_window.wait_window()
 
-    def get_capacity(self):
-        if not (self.setting_window_cap_en.get()).isdigit():
-            return
-        if self.capacity < 3 or self.capacity > 6:
-            return
-        self.capacity = int(self.setting_window_cap_en.get())
-        if str(self.lb0['text']).find('Think of a number with') != 1:
-            self.lb0['text'] = "Think of a number with " + str(self.capacity) + " unique digits!"
-            self.lb0['fg'] = '#0d0'
-        self.setting_window_cap_bt['state'] = 'disabled'
-        # self.setting_window.grab_release()
-        # self.setting_window.withdraw()
 
-    def reset_to_initials(self):
-        self.text1['state'] = 'disabled'
-        self.text2['state'] = 'disabled'
-        self.totqty_resp = None
-        self.rightplace_resp = None
-        self.your_string = None
-        self.game_started = False
-        self.available_digits_str = '0123456789'
-        self.proposed_str = ''
-        self.previous_all_set.clear()
+
+    # def reset_to_initials(self):
+    #     self.text1['state'] = 'disabled'
+    #     self.text2['state'] = 'disabled'
+    #     self.totqty_resp = None
+    #     self.rightplace_resp = None
+    #     self.your_string = None
+    #     self.game_started = False
+    #     self.available_digits_str = '0123456789'
+    #     self.proposed_str = ''
+    #     self.previous_all_set.clear()
 
     def open_setting_window(self):
-        if self.text1['state'] != 'disabled' or self.text2['state'] != 'disabled':
-            return
-
+        # if self.text1['state'] != 'disabled' or self.text2['state'] != 'disabled':
+        #     return
         def callback(sv):
-            self.setting_window_cap_bt['state'] = 'normal'
+            if not self.game.game_started:
+                setting_window.cap_button['state'] = 'normal'
 
-        self.setting_window = tkinter.Toplevel(self.main_win)
-        self.setting_window.title("Settings")
-        self.setting_window.geometry('240x160')
-        self.setting_window.resizable(0, 0)
+        setting_window = SettingWindow(self)
+        setting_window.title("Settings")
+        setting_window.geometry(str(setting_window.width) + 'x' + str(setting_window.height))
+        setting_window.resizable(0, 0)
         # self.setting_window_lf0 = LabelFrame(self.setting_window, text='Capacity:', labelanchor='n', font='arial 8', padx=30, pady=4)
         # self.setting_window_lf0.place(x=10, y=5)
-        self.setting_window_cap_lb = Label(self.setting_window, text='Capacity:', font='arial 8')
-        self.setting_window_cap_lb.place(x=10, y=10)
-        self.setting_window_cap_bt = Button(self.setting_window, text='Apply', font='arial 7',
-                                            command=game.get_capacity)
-        self.setting_window_cap_bt.place(x=90, y=10)
-        self.setting_window_cap_bt['state'] = 'disabled'
+        setting_window.cap_label = Label(setting_window, text='Capacity:', font='arial 8')
+        setting_window.cap_label.place(x=10, y=10)
+        setting_window.cap_button = Button(setting_window, text='Apply', font='arial 7',
+                                           command=setting_window.get_capacity)
+        setting_window.cap_button.place(x=90, y=10)
+        setting_window.cap_button['state'] = 'disabled'
         sv = StringVar()
         sv.trace("w", lambda name, index, mode, sv=sv: callback(sv))
-        self.setting_window_cap_en = Entry(self.setting_window, width=3, font='Arial 8', state='normal',
+        setting_window.cap_entry = Entry(setting_window, width=3, font='Arial 8', state='normal',
                                            textvariable=sv)
-        self.setting_window_cap_en.place(x=65, y=10)
-        self.setting_window_cap_en.delete('0', 'end')
-        self.setting_window_cap_en.insert('0', self.capacity)
-        self.setting_window.transient(self.main_win)
-        self.setting_window.grab_set()
-        self.setting_window.focus_set()
+        setting_window.cap_entry.place(x=65, y=10)
+        setting_window.cap_entry.delete('0', 'end')
+        setting_window.cap_entry.insert('0', self.game.capacity)
+        setting_window.upperlabel = self.lb0
+        setting_window.capacity = self.game.capacity
+        if self.game.game_started:
+            setting_window.cap_button["state"] = "disabled"
+        setting_window.transient(self)
+        setting_window.grab_set()
+        setting_window.focus_set()
         # self.window.wait_window()
 
+class SettingWindow(Toplevel):
+    width = 240
+    height = 140
+
+    def __init__(self, parent_window):
+        super().__init__(parent_window)
+
+    def get_capacity(self):
+        new_capacity = self.cap_entry.get().strip()
+        if not (new_capacity.isdigit()):
+            return
+        new_capacity = int(new_capacity)
+        if new_capacity < 3 or new_capacity > 6:
+            return
+        self.capacity = new_capacity
+        #if str(self.lb0['text']).find('Think of a number with') != 1:
+        self.upperlabel['text'] = "Think of a number with " + str(new_capacity) + " unique digits!"
+        self.upperlabel['fg'] = '#0d0'
+        self.cap_button['state'] = 'disabled'
+        # self.setting_window.grab_release()
+        # self.setting_window.withdraw()
 
 class AboutWindow(Toplevel):
     def __init__(self, parent_window):
@@ -1207,7 +1230,7 @@ class AboutWindow(Toplevel):
 
     def input_your_string(self, event):
         game = self.game
-        if game.game_started or self.new_game_requested: return
+        if game.game_started or self.game.new_game_requested: return
         if not self.your_string_entry:
             self.geometry('280x110')
             self.your_string_entry = Entry(self, width=6, font='Arial 8', state='normal')
@@ -1238,12 +1261,13 @@ class AboutWindow(Toplevel):
         self.button_clicked() #???
 
 
-class MessageBox(Tk):
+class MessageBox:
     max_messagebox_width = 470
     max_messagebox_height = 200
+    messagebox = None
 
     def __init__(self, parent_window):
-        super().__init__()
+        # super().__init__()
         self.parent_window = parent_window
 
     @staticmethod
@@ -1269,7 +1293,7 @@ class MessageBox(Tk):
         max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
                                                                                    reverse=True)[0])) * 10
         max_messagebox_height = new_line_num * 20 + 20
-        messagebox = tkinter.Toplevel(parent_window)
+        messagebox = Toplevel(parent_window)
         messagebox.title(msg.get_type())
         messagebox.geometry(str(max_messagebox_width) + 'x' + str(max_messagebox_height))
         messagebox.resizable(0, 0)
@@ -1311,6 +1335,9 @@ class ResponseMsg:
             return True
         else:
             return False
+
+
+class 
 
 
 if __name__ == '__main__':
