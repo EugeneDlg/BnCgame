@@ -1277,6 +1277,7 @@ class MessageBox:
             if parent_window:
                 parent_window.grab_set()
             messagebox.destroy()
+
         text = str(msg.text()).strip()
         msg_len = len(text)
         initial_text = text.split("\n")[0]      # ???
@@ -1297,14 +1298,14 @@ class MessageBox:
                     longest_length = max(len(result_str), longest_length)
                     r_list.append(result_str)
                     result_str = c
-            if r_list[len(r_list)-1] != result_str:
+            if len(initial_text_list) != len(r_list):
                 r_list.append(result_str)
             total_text = "\n".join(r_list)
         if len(r_list) == 0:
             number_of_rows = 1
         else:
             number_of_rows = len(r_list)
-        max_messagebox_width = longest_length*10 + 40
+        max_messagebox_width = longest_length*10 + 30
         # max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
         #                                                                            reverse=True)[0])) * 10
         max_messagebox_height = number_of_rows * 20 + 20
@@ -1321,6 +1322,8 @@ class MessageBox:
             messagebox.transient(parent_window)
             messagebox.grab_set()
             messagebox.focus_set()
+            if type(parent_window) is LoginWindow:
+                messagebox.mainloop()
         else :
             messagebox.mainloop()
 
