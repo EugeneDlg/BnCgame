@@ -99,7 +99,7 @@ class Game:
         self.totqty_resp = None
         self.rightplace_resp = None
         self.your_string = None
-        self.string_interval_history_frame = 22
+
 
         self.game_started = False
         self.loggedin_user = None
@@ -641,7 +641,7 @@ class Game:
         if not ret_msg:
             return
         if ret_msg.is_error():
-            MessageBox.show_message(self, ret_msg)
+            MessageBox.show_message(None, ret_msg)
             exit()
         elif ret_msg.is_warning():
             self.admin_needed = True
@@ -663,7 +663,6 @@ class Game:
             session.rollback()
             return ResponseMsg(str(err), "error")
         except Exception as err:
-            session.rollback()
             return ResponseMsg(str(err), "error")
         if not r0:
             return ResponseMsg("Please create admin user", "warning")
@@ -978,6 +977,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         super().__init__()
         self.initial_main_height = 200
         self.initial_main_width = 470
+        self.string_interval_history_frame = 22
         self.button = None
         self.lb0 = None
         self.lb4 = None
@@ -1007,6 +1007,8 @@ class MainWin(Tk, AdditionalWindowMethods):
             else:
                 MessageBox.show_message(self, r_msg)
             return
+        self.text1.delete(0,"end")
+        self.text2.delete(0, "end")
         self.change_proposed_str_on_window()
 
 
@@ -1272,38 +1274,55 @@ class MessageBox:
     @staticmethod
     def show_message(parent_window, msg):
         def myclose():
-            parent_window.grab_set()
+            if parent_window:
+                parent_window.grab_set()
             messagebox.destroy()
-
-        # parent_window.grab_release()
-        text = str(msg.get_text())
+        text = str(msg.text()).strip()
         msg_len = len(text)
-        text = text.split("\n")[0]
-        text_list = text.split(" ")
-        text_split_len = len(text_list)
-        result_str = ''
-        new_line_num = 1
-        for c in text_list:
-            if len(result_str) < 40 * new_line_num:
-                result_str += " " + c
-            else:
-                new_line_num += 1
-                result_str += "\n" + c
-        max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
-                                                                                   reverse=True)[0])) * 10
-        max_messagebox_height = new_line_num * 20 + 20
-        messagebox = Toplevel(parent_window)
-        messagebox.title(msg.get_type())
+        initial_text = text.split("\n")[0]      # ???
+        r_list = []
+        longest_length = 0
+        if len(initial_text) <= 40:
+            total_text = initial_text
+            longest_length = len(total_text)
+        else:
+            initial_text_list = initial_text.split(" ")
+            result_str = ''
+            for c in initial_text_list:
+                if len(result_str) < 40:
+                    result_str += " " + c
+
+                else:
+                    # result_str += " " + c
+                    longest_length = max(len(result_str), longest_length)
+                    r_list.append(result_str)
+                    result_str = c
+            if r_list[len(r_list)-1] != result_str:
+                r_list.append(result_str)
+            total_text = "\n".join(r_list)
+        if len(r_list) == 0:
+            number_of_rows = 1
+        else:
+            number_of_rows = len(r_list)
+        max_messagebox_width = longest_length*10 + 40
+        # max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
+        #                                                                            reverse=True)[0])) * 10
+        max_messagebox_height = number_of_rows * 20 + 20
+        messagebox = Toplevel(parent_window) if parent_window else Tk()
+        messagebox.title(msg.type())
         messagebox.geometry(str(max_messagebox_width) + 'x' + str(max_messagebox_height))
         messagebox.resizable(0, 0)
         # messagebox.wm_attributes('-topmost', 'yes')
-        msgbox_lb = Label(messagebox, text=result_str, font='arial 10', anchor='w')
+        msgbox_lb = Label(messagebox, text=total_text, font='arial 10', anchor='w')
         msgbox_lb.pack(fill='none')
         msgbox_bt = Button(messagebox, text="OK", width=12, command=lambda: myclose())
         msgbox_bt.pack(fill='none')
-        messagebox.transient(parent_window)
-        messagebox.grab_set()
-        messagebox.focus_set()
+        if parent_window:
+            messagebox.transient(parent_window)
+            messagebox.grab_set()
+            messagebox.focus_set()
+        else :
+            messagebox.mainloop()
 
 
 class ResponseMsg:
@@ -1311,10 +1330,10 @@ class ResponseMsg:
         self.msg_text = msg_text
         self.msg_type = msg_type
 
-    def get_text(self):
+    def text(self):
         return self.msg_text
 
-    def get_type(self):
+    def type(self):
         return self.msg_type.upper()
 
     def is_error(self):
@@ -1342,12 +1361,12 @@ class UserNotFoundException(Exception):
 
 if __name__ == '__main__':
     game = Game()
+    game.prepare_game()
     main_win = MainWin()
     main_win.game = game
     main_win.title("Bulls and Cows Game")
     main_win.geometry(f'{main_win.initial_main_width}x{main_win.initial_main_height}')
     main_win.resizable(0, 0)
-    game.prepare_game()
     main_win.menubar = Menu(main_win)
     main_win.filemenu = Menu(main_win.menubar, tearoff=0)
     main_win.filemenu.add_command(label="New", command=main_win.new_game_clicked)
