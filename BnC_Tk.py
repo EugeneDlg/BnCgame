@@ -481,7 +481,7 @@ class Game:
             elif s0_l:
                 ret_message += "Login contains inappropriate symbols. "
             if ret_message:
-                return ResponseMsg(ret_message, "error")
+                raise InvalidLoginException(ret_message)
             r0 = Game.get_user_by_login(login)
             if not r0:
                 return ResponseMsg("User with this login doesn't exist!", "error")
@@ -556,9 +556,10 @@ class Game:
     @staticmethod
     def authenticate_user(login, password_entered):
         login = login.strip().lower()
-        r_msg = Game.validate_user(login, op="other")
-        if r_msg:
-            return r_msg
+        try:
+            Game.validate_user(login, op="other")
+        except InvalidLoginException as err:
+            raise err
         user_data = Game.get_user_by_login(login)
         if isinstance(user_data, ResponseMsg):
             return user_data  # We rerturn a ResponseClass instance with an error
@@ -746,9 +747,10 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
     def authenticate_user_eh(self):
         login = self.login_entry.get()
         password = self.password_entry.get()
-        r_msg = Game.authenticate_user(login, password)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.authenticate_user(login, password)
+        except InvalidLoginException as err:
+            MessageBox.show_message(self, ResponseMsg(str(err), "error"))
             return
         self.game.loggedin_user = login
         r_msg = Game.retrieve_user_privileges(Game, login)
@@ -1277,7 +1279,6 @@ class MessageBox:
             if parent_window:
                 parent_window.grab_set()
             messagebox.destroy()
-
         text = str(msg.text()).strip()
         msg_len = len(text)
         initial_text = text.split("\n")[0]      # ???
@@ -1292,7 +1293,6 @@ class MessageBox:
             for c in initial_text_list:
                 if len(result_str) < 40:
                     result_str += " " + c
-
                 else:
                     # result_str += " " + c
                     longest_length = max(len(result_str), longest_length)
@@ -1322,9 +1322,7 @@ class MessageBox:
             messagebox.transient(parent_window)
             messagebox.grab_set()
             messagebox.focus_set()
-            if type(parent_window) is LoginWindow:
-                messagebox.mainloop()
-        else :
+        else:
             messagebox.mainloop()
 
 
@@ -1360,6 +1358,18 @@ class ResponseMsg:
 
 class UserNotFoundException(Exception):
     pass
+
+
+class InvalidLoginException(Exception):
+    def __init__(self, msg):
+        super().__init__()
+        self.msg = msg
+
+    def __repr__(self):
+        return "{}".format(self.msg)
+
+    def __str__(self):
+        return "{}".format(self.msg)
 
 
 if __name__ == '__main__':
