@@ -331,14 +331,15 @@ class Game:
             self.get_new_proposed_str()
             self.attempts += 1
             return
-        r_msg = self.validate_cows_and_bulls(totqty_resp, rightplace_resp, capacity)
+        r_msg = self.validate_cows_and_bulls(totqty_resp, rightplace_resp, capacity) #continue from this
         if r_msg:
             return r_msg
-        self.totqty_resp = totqty_resp =int(totqty_resp)
+        self.totqty_resp = totqty_resp = int(totqty_resp)
         self.rightplace_resp = rightplace_resp = int(rightplace_resp)
         self.proposed_strings_list.append((self.proposed_str, totqty_resp, rightplace_resp))
         if totqty_resp == capacity and rightplace_resp == capacity:
-            return ResponseMsg("", "finished successfully")
+            raise FinishedOKException
+            # return ResponseMsg("", "finished successfully")
         if totqty_resp == 0 and rightplace_resp == 0:
             for a in self.proposed_str:
                 self.available_digits_str = self.available_digits_str.replace(a, '')
@@ -349,7 +350,8 @@ class Game:
                             self.previous_all_set.remove(c)
                             break
                 if len(self.previous_all_set) == 0:
-                    return ResponseMsg("", "finished erroneously")
+                    raise FinishedNotOKException
+                    # return ResponseMsg("", "finished erroneously")
                 r = random.randint(0, len(self.previous_all_set) - 1)
                 for i, c in enumerate(self.previous_all_set):
                     if i == r: break
@@ -375,7 +377,8 @@ class Game:
         else:
             self.previous_all_set = attempt_set
         if len(self.previous_all_set) == 0:
-            return ResponseMsg("", "finished erroneously")
+            raise FinishedNotOKException
+            # return ResponseMsg("", "finished erroneously")
         r = random.randint(0, len(self.previous_all_set) - 1)
         for i, c in enumerate(self.previous_all_set):
             if i == r:
@@ -484,7 +487,7 @@ class Game:
                 raise InvalidLoginException(ret_message)
             r0 = Game.get_user_by_login(login)
             if not r0:
-                return ResponseMsg("User with this login doesn't exist!", "error")
+                raise InvalidLoginException("User with this login doesn't exist!")
             if op == "other":
                 return
         login, password1, password2, firstname, lastname, email = args
@@ -558,7 +561,7 @@ class Game:
         login = login.strip().lower()
         try:
             Game.validate_user(login, op="other")
-        except InvalidLoginException as err:
+        except Exception as err:
             raise err
         user_data = Game.get_user_by_login(login)
         if isinstance(user_data, ResponseMsg):
@@ -588,7 +591,7 @@ class Game:
             session.close()
         except Exception as err:
             session.rollback()
-            return ResponseMsg(str(err), "error")
+            raise err
         self.user_privileges = {'create_other': r0.create_other, 'modify_self': r0.modify_self,
                                 'modify_other': r0.modify_other, 'delete_self': r0.delete_self,
                                 'delete_other': r0.delete_other}
@@ -749,25 +752,20 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         password = self.password_entry.get()
         try:
             Game.authenticate_user(login, password)
-        except InvalidLoginException as err:
-            MessageBox.show_message(self, ResponseMsg(str(err), "error"))
-            return
+        except Exception as err:
+            MessageBox.show_message(self, ErrorMessage(str(err)))
         self.game.loggedin_user = login
-        r_msg = Game.retrieve_user_privileges(Game, login)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.retrieve_user_privileges(Game, login)
+        except Exception as err:
+            MessageBox.show_message(self, ErrorMessage(str(err)))
             return
         r_msg = "You've successfully logged in!"
         if self.game.admin_needed:
             r_msg += " Please do not forget to create Administrator user."
-        MessageBox.show_message(self, ResponseMsg(r_msg, "info"))
-        self.grab_release()
-        self.withdraw()
-        self.wm_attributes('-topmost', 'yes')
-        self.parent_window.grab_set()
-        self.parent_window.focus_set()
-
-
+        MessageBox.show_message(self, InfoMessage(r_msg))
+        #self.grab_release()
+        #self.withdraw()
 
     def open_restore_password_window(self):
         login = self.login_entry.get().strip().lower()
@@ -1000,15 +998,14 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.text1['state'] = 'normal'
         self.text2['state'] = 'normal'
         game.game_started = True
-        r_msg = game.new_guess(self.text1.get(), self.text2.get())
-        if r_msg:
-            if r_msg.type() == "finished successfully":
-                self.finish_game_(True)
-            elif r_msg.type() == "finished erroneously":
-                self.finish_game_(False)
-            else:
-                MessageBox.show_message(self, r_msg)
-            return
+        try:
+            game.new_guess(self.text1.get(), self.text2.get())
+        except FinishedOKException:
+            self.finish_game_(True)
+        except FinishedNotOKException:
+            self.finish_game_(False)
+        except Exception as err:
+                MessageBox.show_message(self, ErrorMessage(str(err)))
         self.text1.delete(0,"end")
         self.text2.delete(0, "end")
         self.change_proposed_str_on_window()
@@ -1269,7 +1266,7 @@ class MessageBox:
     max_messagebox_height = 200
     messagebox = None
 
-    def __init__(self, parent_window):
+    def __init__(self, parent_window, msg):
         # super().__init__()
         self.parent_window = parent_window
 
@@ -1278,8 +1275,13 @@ class MessageBox:
         def myclose():
             if parent_window:
                 parent_window.grab_set()
+            if isinstance(parent_window, LoginWindow) and isinstance(msg, InfoMessage):
+                parent_window.destroy()
+                #self.wm_attributes('-topmost', 'yes')
+                #self.parent_window.grab_set()
+                #self.parent_window.focus_set()
             messagebox.destroy()
-        text = str(msg.text()).strip()
+        text = str(msg.text).strip()
         msg_len = len(text)
         initial_text = text.split("\n")[0]      # ???
         r_list = []
@@ -1310,7 +1312,7 @@ class MessageBox:
         #                                                                            reverse=True)[0])) * 10
         max_messagebox_height = number_of_rows * 20 + 20
         messagebox = Toplevel(parent_window) if parent_window else Tk()
-        messagebox.title(msg.type())
+        messagebox.title(msg.title)
         messagebox.geometry(str(max_messagebox_width) + 'x' + str(max_messagebox_height))
         messagebox.resizable(0, 0)
         # messagebox.wm_attributes('-topmost', 'yes')
@@ -1334,7 +1336,7 @@ class ResponseMsg:
     def text(self):
         return self.msg_text
 
-    def type(self):
+    def title(self):
         return self.msg_type.upper()
 
     def is_error(self):
@@ -1356,6 +1358,26 @@ class ResponseMsg:
             return False
 
 
+class InfoMessage:
+    title = "Info"
+    def __init__(self, text):
+        self.text = text
+        self.title = InfoMessage.title
+
+
+class WarningMessage(InfoMessage):
+    title = "Warning"
+    def __init__(self, msg):
+        super().__init__(msg)
+        self.title = WarningMessage.title
+
+
+class ErrorMessage(InfoMessage):
+    title = "ERROR"
+    def __init__(self, msg):
+        super().__init__(msg)
+        self.title = ErrorMessage.title
+
 class UserNotFoundException(Exception):
     pass
 
@@ -1372,7 +1394,15 @@ class InvalidLoginException(Exception):
         return "{}".format(self.msg)
 
 
-if __name__ == '__main__':
+class FinishedOKException(Exception):
+    pass
+
+
+class FinishedNotOKException(Exception):
+    pass
+
+
+def run():
     game = Game()
     game.prepare_game()
     main_win = MainWin()
@@ -1418,3 +1448,7 @@ if __name__ == '__main__':
     main_win.protocol('WM_DELETE_WINDOW', main_win.close)
     main_win.open_login_window()
     main_win.mainloop()
+
+
+if __name__ == '__main__':
+    run()
