@@ -100,7 +100,6 @@ class Game:
         self.rightplace_resp = None
         self.your_string = None
 
-
         self.game_started = False
         self.loggedin_user = None
         self.admin_needed = False
@@ -317,12 +316,14 @@ class Game:
     @staticmethod
     def validate_cows_and_bulls(cows_raw, bulls_raw, capacity):
         if not (cows_raw.isdigit() and bulls_raw.isdigit()):
-            return ResponseMsg("Number of Cows and Bulls must be a digit", "error")
+            # return ResponseMsg("Number of Cows and Bulls must be a digit", "error")
+            raise BnCException("Number of Cows and Bulls must be a digit")
         cows = int(cows_raw)
         bulls = int(bulls_raw)
         if (cows == capacity and bulls == capacity - 1) or (
                 bulls > cows) or bulls > capacity or cows > capacity:
-            return ResponseMsg("Erroneous input combination! Try again!", "error")
+            # return ResponseMsg("Erroneous input combination! Try again!", "error")
+            raise BnCException("Erroneous input combination! Try again!")
 
     def new_guess(self, totqty_resp, rightplace_resp):
         capacity = self.capacity
@@ -331,9 +332,10 @@ class Game:
             self.get_new_proposed_str()
             self.attempts += 1
             return
-        r_msg = self.validate_cows_and_bulls(totqty_resp, rightplace_resp, capacity) #continue from this
-        if r_msg:
-            return r_msg
+        try:
+            self.validate_cows_and_bulls(totqty_resp, rightplace_resp, capacity)
+        except:
+            raise
         self.totqty_resp = totqty_resp = int(totqty_resp)
         self.rightplace_resp = rightplace_resp = int(rightplace_resp)
         self.proposed_strings_list.append((self.proposed_str, totqty_resp, rightplace_resp))
@@ -675,6 +677,7 @@ class Game:
     def base64_decode_(encoded_string):
         return base64.b64decode(encoded_string.encode("ascii")).decode("ascii")
 
+
 class AdditionalWindowMethods:
     def open_users_window(self):
         users_window = UsersWindow(self)
@@ -754,6 +757,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
             Game.authenticate_user(login, password)
         except Exception as err:
             MessageBox.show_message(self, ErrorMessage(str(err)))
+            return
         self.game.loggedin_user = login
         try:
             Game.retrieve_user_privileges(Game, login)
@@ -764,8 +768,8 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         if self.game.admin_needed:
             r_msg += " Please do not forget to create Administrator user."
         MessageBox.show_message(self, InfoMessage(r_msg))
-        #self.grab_release()
-        #self.withdraw()
+        # self.grab_release()
+        # self.withdraw()
 
     def open_restore_password_window(self):
         login = self.login_entry.get().strip().lower()
@@ -823,7 +827,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         if r_msg:
             MessageBox.show_message(self, r_msg)
             # recovery_window.close()
-        #recovery_window.game = self.game
+        # recovery_window.game = self.game
 
 
 class UsersWindow(Toplevel):
@@ -1002,14 +1006,16 @@ class MainWin(Tk, AdditionalWindowMethods):
             game.new_guess(self.text1.get(), self.text2.get())
         except FinishedOKException:
             self.finish_game_(True)
+            return
         except FinishedNotOKException:
             self.finish_game_(False)
+            return
         except Exception as err:
-                MessageBox.show_message(self, ErrorMessage(str(err)))
-        self.text1.delete(0,"end")
+            MessageBox.show_message(self, ErrorMessage(str(err)))
+            return
+        self.text1.delete(0, "end")
         self.text2.delete(0, "end")
         self.change_proposed_str_on_window()
-
 
     def mouse_function_hide(self, event):
         self.lb3_.pack_forget()
@@ -1027,7 +1033,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.new_game_window()
 
     def new_game_window(self):
-        #self.reset_to_initials()
+        # self.reset_to_initials()
         game = self.game
         self.lb3_['text'] = "Previous set: 0"
         for proposed_strings_lb in self.proposed_strings_lb_list:
@@ -1104,7 +1110,6 @@ class MainWin(Tk, AdditionalWindowMethods):
     #     self.new_game_requested = True
     #     self.add_item_to_history_frame()
 
-
     def finish_game_(self, is_successfully):
         if is_successfully:
             self.lb0['text'] = "YAHOO!!! I Did it! Attempts: " + str(game.attempts)
@@ -1153,8 +1158,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         about_window.focus_set()
         about_window.wait_window()
 
-
-
     # def reset_to_initials(self):
     #     self.text1['state'] = 'disabled'
     #     self.text2['state'] = 'disabled'
@@ -1188,7 +1191,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         sv = StringVar()
         sv.trace("w", lambda name, index, mode, sv=sv: callback(sv))
         setting_window.cap_entry = Entry(setting_window, width=3, font='Arial 8', state='normal',
-                                           textvariable=sv)
+                                         textvariable=sv)
         setting_window.cap_entry.place(x=65, y=10)
         setting_window.cap_entry.delete('0', 'end')
         setting_window.cap_entry.insert('0', self.game.capacity)
@@ -1200,6 +1203,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.grab_set()
         setting_window.focus_set()
         # self.window.wait_window()
+
 
 class SettingWindow(Toplevel):
     width = 170
@@ -1216,12 +1220,13 @@ class SettingWindow(Toplevel):
         if new_capacity < 3 or new_capacity > 6:
             return
         self.game.capacity = new_capacity
-        #if str(self.lb0['text']).find('Think of a number with') != 1:
+        # if str(self.lb0['text']).find('Think of a number with') != 1:
         self.upperlabel['text'] = "Think of a number with " + str(new_capacity) + " unique digits!"
         self.upperlabel['fg'] = '#0d0'
         self.cap_button['state'] = 'disabled'
         # self.setting_window.grab_release()
         # self.setting_window.withdraw()
+
 
 class AboutWindow(Toplevel):
     def __init__(self, parent_window):
@@ -1258,7 +1263,7 @@ class AboutWindow(Toplevel):
         while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
             self.button_clicked()
             self.calc_bulls_and_cows()
-        self.button_clicked() #???
+        self.button_clicked()  # ???
 
 
 class MessageBox:
@@ -1277,13 +1282,14 @@ class MessageBox:
                 parent_window.grab_set()
             if isinstance(parent_window, LoginWindow) and isinstance(msg, InfoMessage):
                 parent_window.destroy()
-                #self.wm_attributes('-topmost', 'yes')
-                #self.parent_window.grab_set()
-                #self.parent_window.focus_set()
+                # self.wm_attributes('-topmost', 'yes')
+                # self.parent_window.grab_set()
+                # self.parent_window.focus_set()
             messagebox.destroy()
+
         text = str(msg.text).strip()
         msg_len = len(text)
-        initial_text = text.split("\n")[0]      # ???
+        initial_text = text.split("\n")[0]  # ???
         r_list = []
         longest_length = 0
         if len(initial_text) <= 40:
@@ -1307,7 +1313,7 @@ class MessageBox:
             number_of_rows = 1
         else:
             number_of_rows = len(r_list)
-        max_messagebox_width = longest_length*10 + 30
+        max_messagebox_width = longest_length * 10 + 30
         # max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
         #                                                                            reverse=True)[0])) * 10
         max_messagebox_height = number_of_rows * 20 + 20
@@ -1360,6 +1366,7 @@ class ResponseMsg:
 
 class InfoMessage:
     title = "Info"
+
     def __init__(self, text):
         self.text = text
         self.title = InfoMessage.title
@@ -1367,6 +1374,7 @@ class InfoMessage:
 
 class WarningMessage(InfoMessage):
     title = "Warning"
+
     def __init__(self, msg):
         super().__init__(msg)
         self.title = WarningMessage.title
@@ -1374,9 +1382,23 @@ class WarningMessage(InfoMessage):
 
 class ErrorMessage(InfoMessage):
     title = "ERROR"
+
     def __init__(self, msg):
         super().__init__(msg)
         self.title = ErrorMessage.title
+
+
+class BnCException(Exception):
+    def __init__(self, msg):
+        super().__init__()
+        self.msg = msg
+
+    def __repr__(self):
+        return "{}".format(self.msg)
+
+    def __str__(self):
+        return "{}".format(self.msg)
+
 
 class UserNotFoundException(Exception):
     pass
