@@ -165,9 +165,12 @@ class Game:
             session = Game.get_db_session()
             r = session.query(BnCUsers).filter_by(login=loggedin_user).first()
             session.close()
-        except Exception as err:
-            session.rollback()
-            return ResponseMsg(str(err), "error")
+        except Exception:
+            try:
+                session.rollback()
+            except:
+                pass
+            raise
         # match = re.search(r"firstname=\'(.*)\', lastname=\'(.*)\', email=\'(.*?)\'", str(r))
         login = loggedin_user
         firstname = str(r.firstname)
@@ -408,9 +411,12 @@ class Game:
             session.add(user)
             session.commit()
             session.close()
-        except Exception as err:
-            session.rollback()
-            return ResponseMsg(str(err), "error")
+        except Exception:
+            try:
+                session.rollback()
+            except:
+                pass
+            raise
 
     @staticmethod
     def modify_user(*args, only_password):
@@ -438,9 +444,12 @@ class Game:
                                                                        "password": Game.encrypt_password(password)})
             session.commit()
             session.close()
-        except Exception as err:
-            session.rollback()
-            return ResponseMsg(str(err), "error")
+        except Exception:
+            try:
+                session.rollback()
+            except:
+                pass
+            raise
 
     @staticmethod
     def delete_user(login):
@@ -452,8 +461,11 @@ class Game:
             session.commit()
             session.close()
         except Exception as err:
-            session.rollback()
-            return ResponseMsg(str(err), "error")
+            try:
+                session.rollback()
+            except:
+                pass
+            raise
 
     @staticmethod
     def get_db_session():
@@ -465,8 +477,8 @@ class Game:
                 DBSession = sessionmaker(bind=Game.engine)
                 Game.session = DBSession()
                 return Game.session
-            except Exception as err:
-                return ResponseMsg(str(err), "error")
+            except Exception:
+                raise
         return Game.session
 
     @staticmethod
@@ -489,7 +501,7 @@ class Game:
                 raise InvalidLoginException(ret_message)
             r0 = Game.get_user_by_login(login)
             if not r0:
-                raise InvalidLoginException("User with this login doesn't exist!")
+                raise InvalidLoginException("User with this login doesn't exist!")      # refactor
             if op == "other":
                 return
         login, password1, password2, firstname, lastname, email = args
@@ -563,7 +575,7 @@ class Game:
         login = login.strip().lower()
         try:
             Game.validate_user(login, op="other")
-        except Exception as err:
+        except Exception:
             raise err
         user_data = Game.get_user_by_login(login)
         if isinstance(user_data, ResponseMsg):
@@ -577,13 +589,13 @@ class Game:
 
     @staticmethod
     def get_user_by_login(login):
-        session = Game.get_db_session()
         try:
+            session = Game.get_db_session()
             r0 = session.query(BnCUsers).filter_by(login=login).first()
             session.close()
-        except Exception as err:
+        except Exception:
             session.rollback()
-            return ResponseMsg(str(err), "error")
+            raise
         return r0
 
     def retrieve_user_privileges(self, login):
@@ -614,14 +626,17 @@ class Game:
             delete_self=user_priv["delete_self"],
             delete_other=user_priv["delete_other"]
         )
-        session = Game.get_db_session()
         try:
+            session = Game.get_db_session()
             session.add(privileges)
             session.commit()
             session.close()
         except Exception as err:
-            session.rollback()
-            return ResponseMsg(str(err), "error")
+            try:
+                session.rollback()
+            except:
+                pass
+            raise
 
     @staticmethod
     def delete_user_privileges(login):
@@ -665,13 +680,16 @@ class Game:
                 Base.metadata.create_all(Game.engine)
             r0 = session.query(BnCUsers).filter_by(login=login).first()
             session.close()
-        except DatabaseError as err:
-            session.rollback()
-            return ResponseMsg(str(err), "error")
-        except Exception as err:
-            return ResponseMsg(str(err), "error")
+        except DatabaseError:
+            try:
+                session.rollback()
+            except:
+                pass
+            raise
+        except Exception:
+            raise
         if not r0:
-            return ResponseMsg("Please create admin user", "warning")
+            return ResponseMsg("Please create admin user", "warning") # continue from this
 
     @staticmethod
     def base64_decode_(encoded_string):
@@ -773,9 +791,10 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
 
     def open_restore_password_window(self):
         login = self.login_entry.get().strip().lower()
-        r_msg = Game.validate_user(login, op="other")
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.validate_user(login, op="other")
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
         user_data = Game.get_user_by_login(login)
         email = user_data.email
@@ -823,9 +842,10 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         recovery_window.focus_set()
         recovery_window.protocol("WM_DELETE_WINDOW", recovery_window.close)
         recovery_window.pincode = Game.generate_pincode()
-        r_msg = Game.send_pincode(email, recovery_window.pincode)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.send_pincode(email, recovery_window.pincode)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             # recovery_window.close()
         # recovery_window.game = self.game
 
@@ -860,15 +880,17 @@ class UsersWindow(Toplevel):
         lastname = self.lastname_entry.get()
         email = self.email_entry.get()
         if self.game.loggedin_user and not Game.apply_privileges("create", False):
-            MessageBox.show_message(self, ResponseMsg("You have no right to create a user", "error"))
+            MessageBox.show_message(self, ErrorMessage("You have no right to create a user"))
             return
-        r_msg = Game.validate_user(login, password1, password2, firstname, lastname, email, op="create")
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.validate_user(login, password1, password2, firstname, lastname, email, op="create")
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
-        r_msg = Game.add_user(login, password1, firstname, lastname, email)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.add_user(login, password1, firstname, lastname, email)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
@@ -876,11 +898,12 @@ class UsersWindow(Toplevel):
         self.firstname_entry.delete(0, 'end')
         self.lastname_entry.delete(0, 'end')
         self.email_entry.delete(0, 'end')
-        r_msg = Game.create_user_privileges(login)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.create_user_privileges(login)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
-        MessageBox.show_message(self, ResponseMsg("User successfully created", "info"))
+        MessageBox.show_message(self, InfoMessage("User successfully created"))
 
     def delete_user_eh(self):
         login = self.login_entry.get()
@@ -888,13 +911,15 @@ class UsersWindow(Toplevel):
         if self.loggedin_user and not Game.apply_privileges("delete", login == self.loggedin_user):
             MessageBox.show_message(self, ResponseMsg("You have no right to delete the user", "error"))
             return
-        r_msg = Game.validate_user(login, op="other")
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.validate_user(login, op="other")
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
-        r_msg = Game.delete_user(login)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.delete_user(login)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
@@ -902,10 +927,12 @@ class UsersWindow(Toplevel):
         self.firstname_entry.delete(0, 'end')
         self.lastname_entry.delete(0, 'end')
         self.email_entry.delete(0, 'end')
-        r_msg = Game.delete_user_privileges(login)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
-        MessageBox.show_message(self, ResponseMsg("User successfully deleted", "info"))
+        try:
+            Game.delete_user_privileges(login)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
+            return
+        MessageBox.show_message(self, InfoMessage("User successfully deleted"))
 
     def modify_user_eh(self):
         login = self.login_entry.get()
@@ -916,15 +943,17 @@ class UsersWindow(Toplevel):
         lastname = self.lastname_entry.get()
         email = self.email_entry.get()
         if self.loggedin_user and not Game.apply_privileges("modify", login == self.loggedin_user):
-            MessageBox.show_message(self, ResponseMsg("You have no right to modify the user", "error"))
+            MessageBox.show_message(self, ErrorMessage("You have no right to modify the user"))
             return
-        r_msg = Game.validate_user(login, password1, password2, firstname, lastname, email, op="modify")
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.validate_user(login, password1, password2, firstname, lastname, email, op="modify")
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
-        r_msg = Game.modify_user(login, password1, firstname, lastname, email, only_password=False)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.modify_user(login, password1, firstname, lastname, email, only_password=False)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
@@ -932,7 +961,7 @@ class UsersWindow(Toplevel):
         self.firstname_entry.delete(0, 'end')
         self.lastname_entry.delete(0, 'end')
         self.email_entry.delete(0, 'end')
-        MessageBox.show_message(self, ResponseMsg("User successfully modified", "info"))
+        MessageBox.show_message(self, InfoMessage("User successfully modified"))
 
 
 class RecoveryPasswordWindow(UsersWindow):
@@ -1367,8 +1396,8 @@ class ResponseMsg:
 class InfoMessage:
     title = "Info"
 
-    def __init__(self, text):
-        self.text = text
+    def __init__(self, msg):
+        self.text = str(msg)
         self.title = InfoMessage.title
 
 
