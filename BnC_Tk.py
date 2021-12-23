@@ -101,6 +101,7 @@ class Game:
         self.your_string = None
 
         self.game_started = False
+        self.new_game_requested = False
         self.loggedin_user = None
         self.admin_needed = False
         # self.main_win = None
@@ -201,10 +202,10 @@ class Game:
         )
         try:
             r = context.verify(password, hashed)
-        except Exception as err:
-            return ResponseMsg(str(err), "error")
+        except:
+            raise
         if not r:
-            return ResponseMsg("Incorrect password", "error")
+            raise IncorrectPasswordException
 
     @staticmethod
     def send_pincode(email, pincode):
@@ -233,15 +234,15 @@ class Game:
             with smtplib.SMTP_SSL(SMTP_ADDRESS, SSL_PORT, context=context) as srv:
                 srv.login(BNC_EMAIL, password)
                 srv.sendmail(sender_email, receiver_email, email_msg.as_string())
-        except Exception as err:
-            return ResponseMsg(str(err), "error")
+        except Exception:
+            raise
 
     @staticmethod
     def validate_pincode(entered_pincode, correct_pincode):
         if not entered_pincode.isnumeric():
-            return ResponseMsg("Pin code must contain only digits", "error")
+            raise BnCException("Pin code must contain only digits")
         if correct_pincode != entered_pincode:
-            return ResponseMsg("Incorrect pincode", "error")
+            raise BnCException("Incorrect pincode")
 
     @staticmethod
     def populate(interim_str, v_list, attempt_set):
@@ -328,19 +329,29 @@ class Game:
             # return ResponseMsg("Erroneous input combination! Try again!", "error")
             raise BnCException("Erroneous input combination! Try again!")
 
-    def new_guess(self, totqty_resp, rightplace_resp):
+    def new_guess(self, totqty_resp_raw, rightplace_resp_raw):
         capacity = self.capacity
         attempt_set = set()
         if self.attempts == 0:
             self.get_new_proposed_str()
             self.attempts += 1
             return
-        try:
-            self.validate_cows_and_bulls(totqty_resp, rightplace_resp, capacity)
-        except:
-            raise
-        self.totqty_resp = totqty_resp = int(totqty_resp)
-        self.rightplace_resp = rightplace_resp = int(rightplace_resp)
+        if not self.your_string:
+            # if not ((self.text1.get()).isdigit() and self.text2.get().isdigit()):
+            #     return
+            # self.totqty_resp = int(self.text1.get())
+            # self.text1.delete(0, 'end')
+            # self.rightplace_resp = int(self.text2.get())
+            # self.text2.delete(0, 'end')
+            try:
+                self.validate_cows_and_bulls(totqty_resp_raw, rightplace_resp_raw, capacity)
+            except:
+                raise
+            self.totqty_resp = totqty_resp = int(totqty_resp_raw)
+            self.rightplace_resp = rightplace_resp = int(rightplace_resp_raw)
+        else:
+            totqty_resp = self.totqty_resp
+            rightplace_resp = self.rightplace_resp
         self.proposed_strings_list.append((self.proposed_str, totqty_resp, rightplace_resp))
         if totqty_resp == capacity and rightplace_resp == capacity:
             raise FinishedOKException
@@ -498,10 +509,10 @@ class Game:
             elif s0_l:
                 ret_message += "Login contains inappropriate symbols. "
             if ret_message:
-                raise InvalidLoginException(ret_message)
+                raise BnCException(ret_message)
             r0 = Game.get_user_by_login(login)
             if not r0:
-                raise InvalidLoginException("User with this login doesn't exist!")      # refactor
+                raise InvalidLoginException(True)
             if op == "other":
                 return
         login, password1, password2, firstname, lastname, email = args
@@ -535,22 +546,25 @@ class Game:
         if not s0_em:
             ret_message += "Incorrect e-mail. "
         if ret_message:
-            return ResponseMsg(ret_message, "error")
+            raise BnCException(ret_message)
         if op == "create":
-            r0 = Game.get_user_by_login(login)
-            session = Game.get_db_session()
             try:
+                r0 = Game.get_user_by_login(login)
+                session = Game.get_db_session()
                 r1 = session.query(BnCUsers).filter_by(email=email).first()
                 session.close()
-            except Exception as err:
-                session.rollback()
-                return ResponseMsg(str(err), "error")
+            except Exception:
+                try:
+                    session.rollback()
+                except:
+                    pass
+                raise
             if r0:
                 ret_message += "User with this login already exists! "
             if r1:
                 ret_message += "User with this e-mail already exists! "
             if ret_message:
-                return ResponseMsg(ret_message, "error")
+                raise BnCException(ret_message)
 
     @staticmethod
     def validate_password(password1, password2):
@@ -575,17 +589,17 @@ class Game:
         login = login.strip().lower()
         try:
             Game.validate_user(login, op="other")
+            user_data = Game.get_user_by_login(login)
         except Exception:
-            raise err
-        user_data = Game.get_user_by_login(login)
-        if isinstance(user_data, ResponseMsg):
-            return user_data  # We rerturn a ResponseClass instance with an error
+            raise
         if not user_data:
-            return ResponseMsg("User not found!", "error")
+            raise BnCException("User not found!")
         # match = re.search(r"password=\'(.*)\'", str(r0))
         password_hashed = user_data.password
-        r = Game.check_password(password_entered, password_hashed)
-        return r
+        try:
+            Game.check_password(password_entered, password_hashed)
+        except Exception:
+            raise
 
     @staticmethod
     def get_user_by_login(login):
@@ -594,7 +608,10 @@ class Game:
             r0 = session.query(BnCUsers).filter_by(login=login).first()
             session.close()
         except Exception:
-            session.rollback()
+            try:
+                session.rollback()
+            except:
+                pass
             raise
         return r0
 
@@ -642,11 +659,11 @@ class Game:
     def delete_user_privileges(login):
         try:
             session = Game.get_db_session()
-            r0 = session.query(Privileges).filter_by(login=login).delete()
+            session.query(Privileges).filter_by(login=login).delete()
             session.commit()
             session.close()
-        except Exception as err:
-            return ResponseMsg(str(err), "error")
+        except Exception:
+            raise
 
     def apply_privileges(self, op, selfish):
         if op == "create":
@@ -658,14 +675,14 @@ class Game:
         return self.user_privileges[op]
 
     def prepare_game(self):
-        ret_msg = self.prepare_db()
-        if not ret_msg:
-            return
-        if ret_msg.is_error():
-            MessageBox.show_message(None, ret_msg)
-            exit()
-        elif ret_msg.is_warning():
+        try:
+            self.prepare_db()
+        except NoAdminException:
             self.admin_needed = True
+            # MessageBox.show_message(None, WarningMessage("Please create admin user"))
+        except Exception as exc:
+            MessageBox.show_message(None, ErrorMessage(exc))
+            exit()
 
     @staticmethod
     def prepare_db():
@@ -689,12 +706,19 @@ class Game:
         except Exception:
             raise
         if not r0:
-            return ResponseMsg("Please create admin user", "warning") # continue from this
+            raise NoAdminException
 
     @staticmethod
     def base64_decode_(encoded_string):
         return base64.b64decode(encoded_string.encode("ascii")).decode("ascii")
 
+    @staticmethod
+    def validate_your_string(capacity, input_string):
+        if not input_string.isdigit() or len(input_string) != capacity or len(set(list(input_string))) != len(
+                list(input_string)):
+            return False
+        else:
+            return True
 
 class AdditionalWindowMethods:
     def open_users_window(self):
@@ -744,9 +768,10 @@ class AdditionalWindowMethods:
             users_window.delete_button["state"] = "disabled"
             users_window.modify_button["state"] = "disabled"
         else:
-            user_data = Game.load_logged_user_info(self.game.loggedin_user)
-            if isinstance(user_data, ResponseMsg):
-                MessageBox.show_message(self, user_data)
+            try:
+                user_data = Game.load_logged_user_info(self.game.loggedin_user)
+            except Exception as exc:
+                MessageBox.show_message(self, ErrorMessage(exc))
                 return
             users_window.login_entry.insert(0, user_data["login"])
             users_window.firstname_entry.insert(0, user_data["firstname"])
@@ -793,14 +818,13 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
         login = self.login_entry.get().strip().lower()
         try:
             Game.validate_user(login, op="other")
+            user_data = Game.get_user_by_login(login)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
-        user_data = Game.get_user_by_login(login)
         email = user_data.email
         # self.login_window.wm_attributes('-topmost', 'no')
         recovery_window = RecoveryPasswordWindow(self)
-
         recovery_window.login = login
         recovery_window.title("Reset password")
         recovery_window.geometry(str(RecoveryPasswordWindow.width) + 'x' + str(RecoveryPasswordWindow.height))
@@ -909,7 +933,7 @@ class UsersWindow(Toplevel):
         login = self.login_entry.get()
         login = login.strip().lower()
         if self.loggedin_user and not Game.apply_privileges("delete", login == self.loggedin_user):
-            MessageBox.show_message(self, ResponseMsg("You have no right to delete the user", "error"))
+            MessageBox.show_message(self, ErrorMessage("You have no right to delete the user"))
             return
         try:
             Game.validate_user(login, op="other")
@@ -983,20 +1007,22 @@ class RecoveryPasswordWindow(UsersWindow):
         password2 = self.password_entry2.get().strip()
         r_msg = Game.validate_password(password1, password2)
         if r_msg:
-            MessageBox.show_message(self, r_msg)
+            MessageBox.show_message(self, ErrorMessage(r_msg))
             return
-        r_msg = Game.modify_user(login, password1, only_password=True)
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.modify_user(login, password1, only_password=True)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
-        MessageBox.show_message(self, ResponseMsg("Password successfully changed", "info"))
-        self.close()
+        MessageBox.show_message(self, InfoMessage("Password successfully changed"))
+        # self.close() # refactor
 
     def verify_pincode_eh(self):
         entered_pincode = self.pincode_entry.get().strip()
-        r_msg = Game.validate_pincode(entered_pincode, str(self.pincode))
-        if r_msg:
-            MessageBox.show_message(self, r_msg)
+        try:
+            Game.validate_pincode(entered_pincode, str(self.pincode))
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
         self.password_label["state"] = "normal"
         self.password_entry1["state"] = "normal"
@@ -1017,13 +1043,12 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.lb3_ = None
         self.text1 = None
         self.text2 = None
-        self.new_game_requested = False
         self.proposed_strings_lb_list = list()
 
     def button_clicked(self):
         game = self.game
-        if self.new_game_requested:
-            self.new_game_requested = False
+        if game.new_game_requested:
+            game.new_game_requested = False
             self.new_game()
             return
         self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
@@ -1148,7 +1173,7 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.lb0['fg'] = '#f00'
         self.button['text'] = 'Play again!'
         self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
-        self.new_game_requested = True
+        self.game.new_game_requested = True
         self.add_item_to_history_frame()
 
     def change_proposed_str_on_window(self):
@@ -1240,6 +1265,7 @@ class SettingWindow(Toplevel):
 
     def __init__(self, parent_window):
         super().__init__(parent_window)
+        self.parent_window = parent_window
 
     def get_capacity(self):
         new_capacity = self.cap_entry.get().strip()
@@ -1261,17 +1287,18 @@ class AboutWindow(Toplevel):
     def __init__(self, parent_window):
         super().__init__(parent_window)
         self.your_string_entry = None
+        self.parent_window = parent_window
 
     def input_your_string(self, event):
         game = self.game
-        if game.game_started or self.game.new_game_requested: return
+        if game.game_started or game.new_game_requested: return
         if not self.your_string_entry:
             self.geometry('280x110')
             self.your_string_entry = Entry(self, width=6, font='Arial 8', state='normal')
             self.your_string_entry.place(x=112, y=81)
             return
         game.your_string = self.your_string_entry.get()
-        if not Game.validate_your_string(game.your_string):
+        if not Game.validate_your_string(game.capacity, game.your_string):
             game.your_string = None
             return
         self.your_string_entry.delete(0, 'end')
@@ -1280,19 +1307,12 @@ class AboutWindow(Toplevel):
         self.geometry('280x90')
         self.automate_answer()
 
-    def validate_your_string(self, input_string):
-        if not input_string.isdigit() or len(input_string) != self.game.capacity or len(set(list(input_string))) != len(
-                list(input_string)):
-            return False
-        else:
-            return True
-
     def automate_answer(self):
         game = self.game
         while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
-            self.button_clicked()
-            self.calc_bulls_and_cows()
-        self.button_clicked()  # ???
+            self.parent_window.button_clicked()
+            game.calc_bulls_and_cows()
+        self.parent_window.button_clicked()  # ???
 
 
 class MessageBox:
@@ -1434,9 +1454,9 @@ class UserNotFoundException(Exception):
 
 
 class InvalidLoginException(Exception):
-    def __init__(self, msg):
+    def __init__(self, a):
         super().__init__()
-        self.msg = msg
+        self.msg = "User with this login doesn't exist!" if a else "User with this login already exists!"
 
     def __repr__(self):
         return "{}".format(self.msg)
@@ -1452,6 +1472,17 @@ class FinishedOKException(Exception):
 class FinishedNotOKException(Exception):
     pass
 
+
+class NoAdminException(Exception):
+    pass
+
+
+class IncorrectPasswordException(Exception):
+    def __repr__(self):
+        return "Incorrect Password!"
+
+    def __str__(self):
+        return "Incorrect Password!"
 
 def run():
     game = Game()
