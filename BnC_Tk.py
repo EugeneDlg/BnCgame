@@ -101,7 +101,7 @@ class Game:
         self.your_string = None
 
         self.game_started = False
-        self.new_game_requested = False
+        self.new_game_requested = True
         self.loggedin_user = None
         self.admin_needed = False
         # self.main_win = None
@@ -1049,12 +1049,16 @@ class MainWin(Tk, AdditionalWindowMethods):
         game = self.game
         if game.new_game_requested:
             game.new_game_requested = False
-            self.new_game()
+            self.new_game_window()
             return
         self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
         self.lb4['text'] = 'Attempts: ' + str(game.attempts)
-        self.text1['state'] = 'normal'
-        self.text2['state'] = 'normal'
+        if game.your_string:
+            self.text1['state'] = 'disabled'
+            self.text2['state'] = 'disabled'
+        else:
+            self.text1['state'] = 'normal'
+            self.text2['state'] = 'normal'
         game.game_started = True
         try:
             game.new_guess(self.text1.get(), self.text2.get())
@@ -1166,13 +1170,13 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def finish_game_(self, is_successfully):
         if is_successfully:
-            self.lb0['text'] = "YAHOO!!! I Did it! Attempts: " + str(game.attempts)
+            self.lb0['text'] = "YAHOO!!! I Did it! Attempts: " + str(self.game.attempts)
             self.lb0['fg'] = '#00f'
         else:
             self.lb0['text'] = "You have broken my mind!!! Think of a new number now!"
             self.lb0['fg'] = '#f00'
         self.button['text'] = 'Play again!'
-        self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
+        self.lb3_['text'] = "Previous set: " + str(len(self.game.previous_all_set))
         self.game.new_game_requested = True
         self.add_item_to_history_frame()
 
@@ -1291,7 +1295,7 @@ class AboutWindow(Toplevel):
 
     def input_your_string(self, event):
         game = self.game
-        if game.game_started or game.new_game_requested: return
+        if game.game_started or not game.new_game_requested: return
         if not self.your_string_entry:
             self.geometry('280x110')
             self.your_string_entry = Entry(self, width=6, font='Arial 8', state='normal')
