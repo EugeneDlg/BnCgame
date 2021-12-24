@@ -101,7 +101,7 @@ class Game:
         self.your_string = None
 
         self.game_started = False
-        self.new_game_requested = True
+        self.new_game_requested = False
         self.loggedin_user = None
         self.admin_needed = False
         # self.main_win = None
@@ -720,6 +720,16 @@ class Game:
         else:
             return True
 
+    def drop_to_start(self):
+        self.totqty_resp = None
+        self.rightplace_resp = None
+        self.your_string = None
+        self.game_started = False
+        self.available_digits_str = '0123456789'
+        self.proposed_str = ''
+        self.previous_all_set.clear()
+        self.attempts = 0
+
 class AdditionalWindowMethods:
     def open_users_window(self):
         users_window = UsersWindow(self)
@@ -1092,6 +1102,7 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def new_game_window(self):
         # self.reset_to_initials()
+        self.game.drop_to_start()
         game = self.game
         self.lb3_['text'] = "Previous set: 0"
         for proposed_strings_lb in self.proposed_strings_lb_list:
@@ -1105,17 +1116,10 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.lb0['font'] = 'arial 12'
         self.lb0['fg'] = '#0d0'
         self.lb4['text'] = "Attempts: " + str(game.attempts)
+        self.text1["state"] = "disabled"
+        self.text2["state"] = "disabled"
 
-    def drop_to_start(self):
-        game = self.game
-        game.totqty_resp = None
-        game.rightplace_resp = None
-        game.your_string = None
-        game.game_started = False
-        game.available_digits_str = '0123456789'
-        game.proposed_str = ''
-        game.previous_all_set.clear()
-        game.attempts = 0
+
 
     def open_login_window(self):
         login_window = LoginWindow(self)
@@ -1177,6 +1181,8 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.lb0['fg'] = '#f00'
         self.button['text'] = 'Play again!'
         self.lb3_['text'] = "Previous set: " + str(len(self.game.previous_all_set))
+        self.text1["state"] = "disabled"
+        self.text2["state"] = "disabled"
         self.game.new_game_requested = True
         self.add_item_to_history_frame()
 
@@ -1295,7 +1301,7 @@ class AboutWindow(Toplevel):
 
     def input_your_string(self, event):
         game = self.game
-        if game.game_started or not game.new_game_requested: return
+        if game.game_started or game.new_game_requested: return
         if not self.your_string_entry:
             self.geometry('280x110')
             self.your_string_entry = Entry(self, width=6, font='Arial 8', state='normal')
