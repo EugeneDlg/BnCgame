@@ -813,7 +813,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
             return
         self.game.loggedin_user = login
         try:
-            Game.retrieve_user_privileges(Game, login)
+            self.game.retrieve_user_privileges(login)
         except Exception as err:
             MessageBox.show_message(self, ErrorMessage(str(err)))
             return
@@ -907,13 +907,14 @@ class UsersWindow(Toplevel):
             self.password_entry2["show"] = "*"
 
     def create_user_eh(self):
+        game = self.game
         login = self.login_entry.get()
         password1 = self.password_entry1.get()
         password2 = self.password_entry2.get()
         firstname = self.firstname_entry.get()
         lastname = self.lastname_entry.get()
         email = self.email_entry.get()
-        if self.game.loggedin_user and not Game.apply_privileges("create", False):
+        if game.loggedin_user and not game.apply_privileges("create", False):
             MessageBox.show_message(self, ErrorMessage("You have no right to create a user"))
             return
         try:
@@ -940,9 +941,10 @@ class UsersWindow(Toplevel):
         MessageBox.show_message(self, InfoMessage("User successfully created"))
 
     def delete_user_eh(self):
+        game = self.game
         login = self.login_entry.get()
         login = login.strip().lower()
-        if self.loggedin_user and not Game.apply_privileges("delete", login == self.loggedin_user):
+        if game.loggedin_user and not game.apply_privileges("delete", login == game.loggedin_user):
             MessageBox.show_message(self, ErrorMessage("You have no right to delete the user"))
             return
         try:
@@ -969,6 +971,7 @@ class UsersWindow(Toplevel):
         MessageBox.show_message(self, InfoMessage("User successfully deleted"))
 
     def modify_user_eh(self):
+        game = self.game
         login = self.login_entry.get()
         login = login.strip().lower()
         password1 = self.password_entry1.get()
@@ -976,7 +979,7 @@ class UsersWindow(Toplevel):
         firstname = self.firstname_entry.get()
         lastname = self.lastname_entry.get()
         email = self.email_entry.get()
-        if self.loggedin_user and not Game.apply_privileges("modify", login == self.loggedin_user):
+        if game.loggedin_user and not game.apply_privileges("modify", login == game.loggedin_user):
             MessageBox.show_message(self, ErrorMessage("You have no right to modify the user"))
             return
         try:
