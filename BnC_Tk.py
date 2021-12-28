@@ -1042,6 +1042,9 @@ class RecoveryPasswordWindow(UsersWindow):
         self.password_entry2["state"] = "normal"
         self.password_button["state"] = "normal"
         self.show_button["state"] = "normal"
+        self.pincode_label["state"] = "disabled"
+        self.pincode_entry["state"] = "disabled"
+        self.pincode_button["state"] = "disabled"
 
 
 class MainWin(Tk, AdditionalWindowMethods):
@@ -1426,15 +1429,20 @@ class ResponseMsg:
             return False
 
 
-class InfoMessage:
+class BaseMessage:
+    def __init__(self, msg):
+        self.text = str(msg)
+
+
+class InfoMessage(BaseMessage):
     title = "Info"
 
     def __init__(self, msg):
-        self.text = str(msg)
+        super().__init__(msg)
         self.title = InfoMessage.title
 
 
-class WarningMessage(InfoMessage):
+class WarningMessage(BaseMessage):
     title = "Warning"
 
     def __init__(self, msg):
@@ -1442,7 +1450,7 @@ class WarningMessage(InfoMessage):
         self.title = WarningMessage.title
 
 
-class ErrorMessage(InfoMessage):
+class ErrorMessage(BaseMessage):
     title = "ERROR"
 
     def __init__(self, msg):
