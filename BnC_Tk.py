@@ -1245,6 +1245,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         def callback(sv):
             if not self.game.game_started:
                 setting_window.cap_button['state'] = 'normal'
+                setting_window.cap_entry["state"] = "normal"
 
         setting_window = SettingWindow(self)
         setting_window.title("Settings")
@@ -1265,14 +1266,25 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.cap_entry.place(x=65, y=10)
         setting_window.cap_entry.delete('0', 'end')
         setting_window.cap_entry.insert('0', self.game.capacity)
+        setting_window.dual_game_label = Label(setting_window, text='Dual game: ', font='arial 8')
+        setting_window.dual_game_label.place(x=10, y=45)
+        cb_variable = BooleanVar()
+        cb_variable.set(0)
+        setting_window.dual_game_checkbox = Checkbutton(setting_window, variable=cb_variable, onvalue=1,
+                                                        offvalue=0, command=setting_window.switch_dual_game)
+        setting_window.dual_game_checkbox.place(x=70, y=40)
         setting_window.upperlabel = self.lb0
         setting_window.game = self.game
+        setting_window.main_window = self
         if self.game.game_started:
             setting_window.cap_button["state"] = "disabled"
+            setting_window.cap_entry["state"] = "disabled"
         setting_window.transient(self)
         setting_window.grab_set()
         setting_window.focus_set()
         # self.window.wait_window()
+
+
 
 
 class SettingWindow(Toplevel):
@@ -1295,8 +1307,13 @@ class SettingWindow(Toplevel):
         self.upperlabel['text'] = "Think of a number with " + str(new_capacity) + " unique digits!"
         self.upperlabel['fg'] = '#0d0'
         self.cap_button['state'] = 'disabled'
+        self.cap_entry["state"] = "disabled"
         # self.setting_window.grab_release()
         # self.setting_window.withdraw()
+
+    def switch_dual_game(self):
+        self.main_window.geometry(f"{2 * self.main_window.initial_main_width}x{self.main_window.initial_main_height}")
+
 
 
 class AboutWindow(Toplevel):
