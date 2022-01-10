@@ -1,4 +1,6 @@
 from itertools import permutations as permut
+import secrets
+
 # "UWV0dTEyMyE="
 # import re
 # import base64
@@ -15,18 +17,7 @@ from itertools import permutations as permut
 # print(gg)
 #
 # print(base64.b64encode("tP$sa7Ml".encode("ascii")).decode("ascii"))
-a = "1"
-print(id(a))
-a = "2"
-print(id(a))
-class A:
-    pass
-
-class B:
-    pass
-
-A.x = "3"
-B.y = A.x
-B.y = "4"
-print(A.x)
-print(B.y)
+def rand0():
+    t = permut("1234",4)
+    return secrets.choice(list(t))
+print("".join(rand0()))

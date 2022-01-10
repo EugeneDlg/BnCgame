@@ -3,7 +3,8 @@ import random
 import re
 import tkinter
 from tkinter import *
-import itertools
+from itertools import permutations
+from secrets import choice
 import psycopg2
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Date
 from sqlalchemy import create_engine, inspect
@@ -87,38 +88,35 @@ class Game:
       </body>
     </html>
     """
+    good_mood_phrases = [
+        "Wishing you and me an interesting game!",
+        "Hope you will win!:) (Actually not, ha-ha)",
+        "Best luck for your playing! I believe in you!:)",
+        "May God bless you with boundless success!",
+        "Stop worrying and start doing!",
+        "I know nothing can make you down. Nothing can damage your confidence!",
+        "Stop masturbating and play carefully!",
+        "Put your best efforts and earn your success!",
+        "Great accomplishments and success are my best wishes for you today!",
+        "My good wishes will always be with you. Best of luck!",
+        "I am not a bit worried about your win. As I believe in you!"
+        "Ace it.",
+        "Sending you abundant wishes for this game!",
+        "Failure and success are the two sides of the same coin. So don’t get nervous!"
+    ]
 
     def __init__(self, capacity=4):
         super().__init__()
         self.capacity = capacity
-        self.attempts = 0
+        self.my_history_list = list()
+        self.your_history_list = list()
         self.previous_all_set = set()
-        self.available_digits_str = '0123456789'
-        self.proposed_str = ''
-        self.proposed_strings_list = list()
-        self.totqty_resp = None
-        self.rightplace_resp = None
-        self.your_string = None
-
-        self.game_started = False
         self.new_game_requested = False
         self.loggedin_user = None
         self.admin_needed = False
-        # self.main_win = None
-        # self.menubar = None
-        # self.filemenu = None
-        # self.helpmenu = None
-        # self.lb0 = None
-        # self.lb1 = None
-        # self.text1 = None
-        # self.lb2 = None
-        # self.text2 = None
-        # self.button = None
-        # self.lb3_ = None
-        # self.fr0 = None
-        # self.lb4 = None
-        self.your_string_entry = None
+        self.dual_game_enabled = True
         self.user_privileges = None
+        self.game_initials()
 
         # self.setting_window = None
         # self.help_window = None
@@ -305,17 +303,17 @@ class Game:
             if iter1 == 0:
                 interim_str[i0] = 'V'
 
-    def calc_bulls_and_cows(self):
-        totqty_resp = rightplace_resp = 0
-        for i0, c0 in enumerate(self.your_string):
-            for i1, c1 in enumerate(self.proposed_str):
+    @staticmethod
+    def calc_bulls_and_cows(true_number, guess_number):
+        cows = bulls = 0
+        for i0, c0 in enumerate(true_number):
+            for i1, c1 in enumerate(guess_number):
                 if c0 == c1:
-                    totqty_resp += 1
+                    cows += 1
                     if i0 == i1:
-                        rightplace_resp += 1
+                        bulls += 1
                     break
-        self.totqty_resp = totqty_resp
-        self.rightplace_resp = rightplace_resp
+        return (cows, bulls)
 
     @staticmethod
     def validate_cows_and_bulls(cows_raw, bulls_raw, capacity):
@@ -329,33 +327,27 @@ class Game:
             # return ResponseMsg("Erroneous input combination! Try again!", "error")
             raise BnCException("Erroneous input combination! Try again!")
 
-    def new_guess(self, totqty_resp_raw, rightplace_resp_raw):
+    def my_guess(self, totqty_resp_raw, rightplace_resp_raw):
         capacity = self.capacity
         attempt_set = set()
-        if self.attempts == 0:
-            self.get_new_proposed_str()
-            self.attempts += 1
-            return
-        if not self.your_string:
+
+        if not self.your_string_for_automation_mono_game:
             # if not ((self.text1.get()).isdigit() and self.text2.get().isdigit()):
             #     return
             # self.totqty_resp = int(self.text1.get())
             # self.text1.delete(0, 'end')
             # self.rightplace_resp = int(self.text2.get())
             # self.text2.delete(0, 'end')
-            try:
-                self.validate_cows_and_bulls(totqty_resp_raw, rightplace_resp_raw, capacity)
-            except:
-                raise
+
             self.totqty_resp = totqty_resp = int(totqty_resp_raw)
             self.rightplace_resp = rightplace_resp = int(rightplace_resp_raw)
         else:
             totqty_resp = self.totqty_resp
             rightplace_resp = self.rightplace_resp
-        self.proposed_strings_list.append((self.proposed_str, totqty_resp, rightplace_resp))
+        self.my_history_list.append((self.proposed_str, totqty_resp, rightplace_resp))
         if totqty_resp == capacity and rightplace_resp == capacity:
-            raise FinishedOKException
-            # return ResponseMsg("", "finished successfully")
+            # raise FinishedOKException
+            return True
         if totqty_resp == 0 and rightplace_resp == 0:
             for a in self.proposed_str:
                 self.available_digits_str = self.available_digits_str.replace(a, '')
@@ -375,14 +367,14 @@ class Game:
             else:
                 self.get_new_proposed_str()
             self.attempts += 1
-            return
+            return False
         interim_str = ["V" for a in range(self.capacity)]  # to_do
         init_rest_str = self.available_digits_str
         for a in self.proposed_str:
             init_rest_str = init_rest_str.replace(a, '')
         v_list = []
         if capacity - totqty_resp > 0:
-            for l in itertools.permutations(init_rest_str, capacity - totqty_resp):
+            for l in permutations(init_rest_str, capacity - totqty_resp):
                 v_list.append(''.join(map(str, l)))
         if rightplace_resp > 0:
             self.get_template(0, 0, 0, 0, capacity, interim_str, v_list, attempt_set)
@@ -401,6 +393,20 @@ class Game:
                 break
         self.proposed_str = c
         self.attempts += 1
+        return False
+
+    def your_guess(self, your_guess_string):
+        if self.attempts < 1:
+            return False
+        self.your_cows, self.your_bulls = self.calc_bulls_and_cows(self.my_string_for_you, your_guess_string)
+        self.your_history_list.append((your_guess_string, self.your_cows, self.your_bulls))
+        if self.your_cows==self.capacity and self.your_bulls==self.capacity:
+            return True
+        else:
+            return False
+
+    def think_of_number_for_you(self):
+        self.my_string_for_you = "".join(choice(list(permutations("0123456789", self.capacity))))
 
     @staticmethod
     def add_user(*args):
@@ -716,19 +722,22 @@ class Game:
     def validate_your_string(capacity, input_string):
         if not input_string.isdigit() or len(input_string) != capacity or len(set(list(input_string))) != len(
                 list(input_string)):
-            return False
-        else:
-            return True
+            raise BnCException("You entered an invalid string trying to guess my number!")
 
-    def drop_to_start(self):
+    def game_initials(self):
+        self.previous_all_set.clear()
+        self.my_history_list.clear()
+        self.your_history_list.clear()
         self.totqty_resp = None
         self.rightplace_resp = None
-        self.your_string = None
-        self.game_started = False
+        self.your_string_for_automation_mono_game = None
+        self.my_string_for_you = None
+        self.your_cows = None
+        self.your_bulls = None
         self.available_digits_str = '0123456789'
         self.proposed_str = ''
-        self.previous_all_set.clear()
         self.attempts = 0
+        self.game_started = False
 
 class AdditionalWindowMethods:
     def open_users_window(self):
@@ -1050,46 +1059,96 @@ class RecoveryPasswordWindow(UsersWindow):
 class MainWin(Tk, AdditionalWindowMethods):
     def __init__(self):
         super().__init__()
-        self.initial_main_height = 200
-        self.initial_main_width = 470
+        self.mono_game_main_height = 200
+        self.mono_game_main_width = 400
+        self.dual_game_main_height = self.mono_game_main_height + 100
+        self.dual_game_main_width = int(1.4 * self.mono_game_main_width)
         self.string_interval_history_frame = 22
-        self.button = None
-        self.lb0 = None
-        self.lb4 = None
-        self.lb3_ = None
-        self.text1 = None
-        self.text2 = None
-        self.proposed_strings_lb_list = list()
+        self.windows_initials()
 
-    def button_clicked(self):
+    def windows_initials(self):
+        self.go_button = None
+        self.upper_label = None
+        self.attempts_label = None
+        self.lb3_ = None
+        self.my_cows_label = None
+        self.my_cows_entry = None
+        self.my_bulls_label = None
+        self.my_bulls_entry = None
+        self.my_history_frame = None
+        self.my_outer_frame = None
+        self.your_guess_entry = None
+        self.your_cows_label = None
+        self.your_bulls_label = None
+        self.your_history_frame = None
+        self.your_outer_frame = None
+        self.my_history_lb_list = list()
+        self.your_history_lb_list = list()
+
+    def go_button_clicked(self):
         game = self.game
         if game.new_game_requested:
             game.new_game_requested = False
             self.new_game_window()
             return
-        self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
-        self.lb4['text'] = 'Attempts: ' + str(game.attempts)
-        if game.your_string:
-            self.text1['state'] = 'disabled'
-            self.text2['state'] = 'disabled'
+        # self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
+        self.attempts_label['text'] = 'Attempts: ' + str(game.attempts)
+        if not game.your_string_for_automation_mono_game:
+            self.my_cows_label["state"] = "normal"
+            self.my_cows_entry["state"] = "normal"
+            self.my_bulls_label["state"] = "normal"
+            self.my_bulls_entry["state"] = "normal"
         else:
-            self.text1['state'] = 'normal'
-            self.text2['state'] = 'normal'
+            self.my_cows_label["state"] = "disabled"
+            self.my_cows_entry["state"] = "disabled"
+            self.my_bulls_label["state"] = "disabled"
+            self.my_bulls_entry["state"] = "disabled"
+        if game.dual_game_enabled:
+            self.my_upper_label["state"] = "normal"
+            self.your_upper_label["state"] = "normal"
+            self.your_guess_entry["state"] = "normal"
+            self.your_cows_label["state"] = "normal"
+            self.your_bulls_label["state"] = "normal"
         game.game_started = True
+        if game.attempts == 0:
+            game.get_new_proposed_str()
+            game.think_of_number_for_you()
+            game.attempts += 1
+            if game.dual_game_enabled:
+                self.change_data_on_window_dual_game()
+            else:
+                self.change_data_on_window_mono_game()
+            return
+        my_cows_entered = self.my_cows_entry.get().strip()
+        my_bulls_entered = self.my_bulls_entry.get().strip()
         try:
-            game.new_guess(self.text1.get(), self.text2.get())
-        except FinishedOKException:
-            self.finish_game_(True)
-            return
+            game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
+            if game.dual_game_enabled and game.attempts > 0:
+                your_guess_entered = self.your_guess_entry.get().strip()
+                game.validate_your_string(game.capacity, your_guess_entered)
+                your_result = game.your_guess(your_guess_entered)
+            else:
+                your_result = False
+            my_result = game.my_guess(my_cows_entered, my_bulls_entered)
         except FinishedNotOKException:
-            self.finish_game_(False)
+            self.finish_game_on_main_window(0)
             return
-        except Exception as err:
-            MessageBox.show_message(self, ErrorMessage(str(err)))
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(str(exc)))
             return
-        self.text1.delete(0, "end")
-        self.text2.delete(0, "end")
-        self.change_proposed_str_on_window()
+        if my_result and not your_result:
+            self.finish_game_on_main_window(1)
+            return
+        if your_result and not my_result:
+            self.finish_game_on_main_window(2)
+            return
+        if your_result and my_result:
+            self.finish_game_on_main_window(3)
+            return
+        if game.dual_game_enabled:
+            self.change_data_on_window_dual_game()
+        else:
+            self.change_data_on_window_mono_game()
 
     def mouse_function_hide(self, event):
         self.lb3_.pack_forget()
@@ -1101,31 +1160,33 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.destroy()
         self.quit()
 
+
     def new_game_clicked(self):
         if not self.game.game_started: return
-        self.game.drop_to_start()
+        self.game.game_initials()
         self.new_game_window()
 
     def new_game_window(self):
         # self.reset_to_initials()
-        self.game.drop_to_start()
         game = self.game
-        self.lb3_['text'] = "Previous set: 0"
-        for proposed_strings_lb in self.proposed_strings_lb_list:
-            proposed_strings_lb.destroy()
-        self.proposed_strings_lb_list.clear()
-        game.proposed_strings_list.clear()
-        self.fr0.pack_forget()
-        self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
-        self.button['text'] = "OK! Go on!"
-        self.lb0['text'] = "Think of a number with " + str(game.capacity) + " unique digits!"
-        self.lb0['font'] = 'arial 12'
-        self.lb0['fg'] = '#0d0'
-        self.lb4['text'] = "Attempts: " + str(game.attempts)
-        self.text1["state"] = "disabled"
-        self.text2["state"] = "disabled"
-
-
+        game.game_initials()
+        # self.my_history_frame = LabelFrame(self, text='History of attempts', labelanchor='n', font='arial 8',
+        #                                    padx='80')
+        # self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
+        # self.go_button['text'] = "OK! Go on!"
+        # self.upper_label['font'] = 'arial 12'
+        # self.upper_label['fg'] = '#0d0'
+        # self.attempts_label['text'] = "Attempts: " + str(game.attempts)
+        # self.my_cows_entry.delete(0, "end")
+        # self.my_bulls_entry.delete(0, "end")
+        # self.my_cows_entry["state"] = "disabled"
+        # self.my_bulls_entry["state"] = "disabled"
+        # self.upper_label['text'] = "Think of a number with " + str(game.capacity) + " unique digits!" #???
+        if game.dual_game_enabled:
+            self.enable_dual_game()
+        else:
+            self.enable_mono_game()
+        game.think_of_number_for_you() #???
 
     def open_login_window(self):
         login_window = LoginWindow(self)
@@ -1170,46 +1231,111 @@ class MainWin(Tk, AdditionalWindowMethods):
         pass
 
     # def finish_game(self, set_size, label_text, label_color):
-    #     # self.drop_to_start()
+    #     # self.game_initials()
     #     self.lb3_['text'] = "Previous set: " + str(set_size)
     #     self.lb0['text'] = label_text
     #     self.lb0['fg'] = label_color
     #     self.button['text'] = 'Play again!'
     #     self.new_game_requested = True
-    #     self.add_item_to_history_frame()
+    #     self.add_item_to_my_history_frame()
 
-    def finish_game_(self, is_successfully):
-        if is_successfully:
-            self.lb0['text'] = "YAHOO!!! I Did it! Attempts: " + str(self.game.attempts)
-            self.lb0['fg'] = '#00f'
+    def finish_game_on_main_window(self, game_result_code):
+        if game_result_code == 0:   ####
+            self.upper_label['text'] = "You have broken my mind! Please be more concentrated!\nThink of a new number!"
+            self.upper_label['fg'] = '#f00'
+        elif game_result_code == 1:
+            self.upper_label['text'] = "YAHOO! I've won! Thank you for interesting play!\n" \
+                                       "Attempts: " + str(self.game.attempts)
+            self.upper_label['fg'] = '#00f'
+        elif game_result_code == 2:
+            self.upper_label['text'] = "Today is your day! You've won! Congrats!\n" \
+                                       "Attempts: " + str(self.game.attempts)
+            self.upper_label['fg'] = '#00f'
         else:
-            self.lb0['text'] = "You have broken my mind!!! Think of a new number now!"
-            self.lb0['fg'] = '#f00'
-        self.button['text'] = 'Play again!'
-        self.lb3_['text'] = "Previous set: " + str(len(self.game.previous_all_set))
-        self.text1["state"] = "disabled"
-        self.text2["state"] = "disabled"
+            self.upper_label['text'] = "We've ended this game in a tie!..\n" \
+                                       "Attempts: " + str(self.game.attempts)
+            self.upper_label['fg'] = '#00a'
+        self.go_button['text'] = 'Play again!'
+        #self.lb3_['text'] = "Previous set: " + str(len(self.game.previous_all_set))
+        self.my_cows_entry.delete(0, "end")
+        self.my_bulls_entry.delete(0, "end")
+        self.my_cows_label["state"] = "disabled"
+        self.my_cows_entry["state"] = "disabled"
+        self.my_bulls_label["state"] = "disabled"
+        self.my_bulls_entry["state"] = "disabled"
+        if self.game.dual_game_enabled:
+            self.my_upper_label["state"] = "disabled"
+            self.your_upper_label["state"] = "disabled"
+            self.your_guess_entry.delete(0, "end")
+            self.your_guess_entry["state"] = "disabled"
+            self.your_cows_label["state"] = "disabled"
+            self.your_bulls_label["state"] = "disabled"
         self.game.new_game_requested = True
-        self.add_item_to_history_frame()
+        if self.game.dual_game_enabled:
+            self.add_item_to_my_and_your_history_frame()
+        else:
+            self.add_item_to_my_history_frame()
 
-    def change_proposed_str_on_window(self):
-        self.lb0['text'] = 'I guess your number is : "' + self.game.proposed_str + '" Enter your answer:'
-        self.lb0['fg'] = '#000'
-        self.button['text'] = 'OK'
-        self.lb4['text'] = 'Attempts: ' + str(self.game.attempts)
+    def change_data_on_window_mono_game(self):
+        self.my_cows_entry.delete(0, "end")
+        self.my_bulls_entry.delete(0, "end")
+        self.upper_label['text'] = 'I guess your number is : "' + self.game.proposed_str
+        self.upper_label['fg'] = '#000'
+        self.go_button["text"] = "OK!"
+        self.attempts_label['text'] = 'Attempts: ' + str(self.game.attempts)
         if self.game.attempts > 1:
-            self.add_item_to_history_frame()
+            self.add_item_to_my_history_frame()
 
-    def add_item_to_history_frame(self):
+    def add_item_to_my_history_frame(self):
         game = self.game
-        h = self.initial_main_height + self.string_interval_history_frame * (len(game.proposed_strings_list) - 1)
-        self.fr0.pack(expand='yes')
+        h = self.initial_main_height + self.string_interval_history_frame * (len(game.my_history_list) - 1)
+        # if not self.my_history_frame:
+        #     self.my_history_frame = LabelFrame(self, text='History of attempts', labelanchor='n', font='arial 8',
+        #                                        padx='80')
+        self.my_history_frame.place(x=90, y=130)
         self.geometry(f'{self.initial_main_width}x{h}')
+        t0 = game.my_history_list[-1]
+        my_frame_lb = Label(self.my_history_frame, text=str(t0[0]) + "  " + str(t0[1]) + "." + str(t0[2]), font='arial 9')
+        my_frame_lb.pack()
+        self.my_history_lb_list.append(my_frame_lb)
 
-        t0 = game.proposed_strings_list[-1]
-        fr0_lb = Label(self.fr0, text=str(t0[0]) + "  " + str(t0[1]) + "." + str(t0[2]), font='arial 9')
-        fr0_lb.pack()
-        self.proposed_strings_lb_list.append(fr0_lb)
+    def change_data_on_window_dual_game(self):
+        self.upper_label["text"] = choice(Game.good_mood_phrases)
+        self.my_cows_entry.delete(0, "end")
+        self.my_bulls_entry.delete(0, "end")
+        self.your_guess_entry.delete(0, "end")
+        self.my_upper_label['text'] = 'I guess your number is : "' + self.game.proposed_str
+        self.upper_label['fg'] = '#000'
+        self.attempts_label['text'] = 'Attempts: ' + str(self.game.attempts)
+        self.go_button["text"] = "OK!"
+        if self.game.attempts > 1:
+            self.your_cows_label["text"] = "You guessed cows: " + str(self.game.your_cows) + "\n"
+            self.your_bulls_label["text"] = "You guessed bulls: " + str(self.game.your_bulls) + "\n"
+            self.add_item_to_my_and_your_history_frame()
+
+    def add_item_to_my_and_your_history_frame(self):
+        game = self.game
+        h = self.initial_main_height + self.string_interval_history_frame * (len(game.my_history_list) - 1)
+        # if not self.my_history_frame:
+        #     self.my_history_frame = LabelFrame(self, text='History of attempts', labelanchor='n', font='arial 8',
+        #                                        padx='80')
+        self.my_history_frame.pack()
+        self.your_history_frame.pack()
+        self.geometry(f'{self.initial_main_width}x{h}')
+        item = game.my_history_list[-1]
+        my_frame_lb = Label(self.my_history_frame, text=str(item[0]) + "  " + str(item[1]) + "." + str(item[2]),
+                            font='arial 9')
+        my_frame_lb.pack()
+        self.my_history_lb_list.append(my_frame_lb)
+        item = game.your_history_list[-1]
+        your_frame_lb = Label(self.your_history_frame, text=str(item[0]) + "  " + str(item[1]) + "." + str(item[2]),
+                            font='arial 9')
+        your_frame_lb.pack()
+        self.your_history_lb_list.append(your_frame_lb)
+        self.go_button.place(x=int(1.4*self.initial_main_width/2-200),
+                             y=240+self.string_interval_history_frame*(len(game.my_history_list)-1))
+
+
 
     def open_about_window(self):
         about_window = AboutWindow(self)
@@ -1222,7 +1348,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         about_window.lb1.place(x=10, y=10)
         about_window.button = Button(about_window, text='OK', command=lambda: about_window.destroy())
         about_window.button.place(x=120, y=50)
-        about_window.lb1.bind("<Double-Button-3>", about_window.input_your_string)
+        about_window.lb1.bind("<Double-Button-3>", about_window.input_your_string_for_automation_mono_game)
+        about_window.button.bind("<Double-Button-3>", about_window.show_my_guessed_number)
         about_window.transient(self)
         about_window.grab_set()
         about_window.focus_set()
@@ -1248,6 +1375,7 @@ class MainWin(Tk, AdditionalWindowMethods):
                 setting_window.cap_entry["state"] = "normal"
 
         setting_window = SettingWindow(self)
+        setting_window.game = self.game
         setting_window.title("Settings")
         setting_window.geometry(str(setting_window.width) + 'x' + str(setting_window.height))
         setting_window.resizable(0, 0)
@@ -1268,13 +1396,15 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.cap_entry.insert('0', self.game.capacity)
         setting_window.dual_game_label = Label(setting_window, text='Dual game: ', font='arial 8')
         setting_window.dual_game_label.place(x=10, y=45)
-        cb_variable = BooleanVar()
-        cb_variable.set(0)
-        setting_window.dual_game_checkbox = Checkbutton(setting_window, variable=cb_variable, onvalue=1,
-                                                        offvalue=0, command=setting_window.switch_dual_game)
+        setting_window.cb_variable = BooleanVar()
+        setting_window.cb_variable.set(int(self.game.dual_game_enabled))
+        setting_window.dual_game_checkbox = Checkbutton(setting_window, variable=setting_window.cb_variable,
+                                                        onvalue=1, offvalue=0,
+                                                        command=setting_window.switch_dual_game)
         setting_window.dual_game_checkbox.place(x=70, y=40)
-        setting_window.upperlabel = self.lb0
-        setting_window.game = self.game
+        setting_window.dual_game_checkbox.select() if self.game.dual_game_enabled else \
+            setting_window.dual_game_checkbox.deselect()
+        setting_window.upperlabel = self.upper_label
         setting_window.main_window = self
         if self.game.game_started:
             setting_window.cap_button["state"] = "disabled"
@@ -1284,8 +1414,127 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.focus_set()
         # self.window.wait_window()
 
+    def enable_mono_game(self):
+        game = self.game
+        self.destroy_previous_window_items()
+        self.windows_initials()
+        self.initial_main_width = self.mono_game_main_width
+        self.initial_main_height = self.mono_game_main_height
+        self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
+        self.resizable(0, 0)
+        self.upper_label = Label(self, text="Think of a number with " + str(game.capacity) + " unique digits!",
+                                     font='arial 12')
+        self.upper_label.bind("<Double-Button-1>", self.mouse_function_hide)
+        self.upper_label.bind("<Double-Button-3>", self.mouse_function_show)
+        self.upper_label['fg'] = '#0d0'
+        # self.upper_label.place(x=70, y=5)
+        self.upper_label.pack()
+        self.my_cows_label = Label(self, text='Enter a number of "cows": ', font='arial 10')
+        self.my_cows_label.place(x=105, y=40)
+        self.my_cows_entry = Entry(self, width=3, font='Arial 8', state='disabled')
+        self.my_cows_entry.place(x=270, y=40)
+        self.my_bulls_label = Label(self, text='Enter a number of "bulls": ', font='arial 10')
+        self.my_bulls_label.place(x=105, y=70)
+        self.my_bulls_entry = Entry(self, width=3, font='Arial 8', state='disabled')
+        self.my_bulls_entry.place(x=270, y=70)
+        self.go_button = Button(self, text="OK! Go on!", width=20, command=self.go_button_clicked)
+        self.go_button.place(x=110, y=100)
+        self.my_history_frame = LabelFrame(self, text='History of attempts', labelanchor='n', font='arial 8',
+                                           padx='80')
+        self.lb3_ = Label(self, text="Previous set: " + str(len(game.previous_all_set)), font='arial 5')
+        #  lb3_.pack(fill='none', side='bottom')
+        #  lb3_.pack_forget()
+        self.attempts_label = Label(self, text="Attempts: " + str(game.attempts), font='arial 8')
+        self.attempts_label.pack(side="bottom")
 
+    def enable_dual_game(self):
+        game = self.game
+        self.destroy_previous_window_items()
+        self.windows_initials()
+        self.initial_main_width = self.dual_game_main_width
+        self.initial_main_height = self.dual_game_main_height
+        self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
+        self.resizable(0, 0)
+        self.upper_label = Label(self, text="Think of a number with " + str(game.capacity) + " unique digits!\n"
+                                 "And I will think of a number to guess for you!",
+                                     font='arial 12')
+        self.upper_label.bind("<Double-Button-1>", self.mouse_function_hide)
+        self.upper_label.bind("<Double-Button-3>", self.mouse_function_show)
+        self.upper_label['fg'] = '#0d0'
+        # self.upper_label.place(x=70, y=5)
+        self.upper_label.pack()
+        self.my_outer_frame = LabelFrame(self, text='My part', labelanchor='n', font='arial 8', padx='40', pady='5')
+        self.my_outer_frame.place(x=15, y=50)
+        self.my_upper_label = Label(self.my_outer_frame, text="I guess your number is: "+ "    ", font='arial 11')
+        self.my_upper_label.pack()
+        self.my_upper_label["state"] = "disabled"
+        self.my_cows_label = Label(self.my_outer_frame, text="Enter the number of cows: ", font='arial 11')
+        self.my_cows_label.pack()
+        self.my_cows_label["state"] = "disabled"
+        self.my_cows_entry = Entry(self.my_outer_frame, width=3, font='Arial 8', state='disabled')
+        self.my_cows_entry.pack()
+        self.my_cows_entry["state"] = "disabled"
+        self.my_bulls_label = Label(self.my_outer_frame, text="Enter the number of bulls: ", font='arial 11')
+        self.my_bulls_label.pack()
+        self.my_bulls_label["state"] = "disabled"
+        self.my_bulls_entry = Entry(self.my_outer_frame, width=3, font='Arial 8', state='disabled')
+        self.my_bulls_entry.pack()
+        self.my_bulls_entry["state"] = "disabled"
+        self.my_align_label = Label(self.my_outer_frame, text="\n", font='arial 4')
+        self.my_align_label.pack()
+        self.my_history_frame = LabelFrame(self.my_outer_frame, text='History of attempts', labelanchor='n', font='arial 8', padx='40')
+        self.my_history_frame.pack()
+        # self.lb002 = Label(self.my_history_frame, text="1111 1.1", font='arial 9')
+        # self.lb002.pack()
+        self.your_outer_frame = LabelFrame(self, text='Your part', labelanchor='n', font='arial 8', padx='60', pady='3')
+        self.your_outer_frame.place(x=280, y=50)
+        self.your_upper_label = Label(self.your_outer_frame, text="Enter your guess: ", font='arial 11')
+        self.your_upper_label.pack()
+        self.your_upper_label["state"] = "disabled"
+        self.your_guess_entry = Entry(self.your_outer_frame, width=game.capacity+2, font='Arial 11', state='disabled')
+        self.your_guess_entry.pack()
+        self.your_guess_entry["state"] = "disabled"
+        self.your_cows_label = Label(self.your_outer_frame, text="You guessed cows: \n", font='arial 11')
+        self.your_cows_label.pack()
+        self.your_cows_label["state"] = "disabled"
+        # self.cows_entry = Entry(self.your_outer_frame, width=3, font='Arial 8', state='disabled')
+        # self.cows_entry.pack()
+        self.your_bulls_label = Label(self.your_outer_frame, text="You guessed bulls: \n", font='arial 11')
+        self.your_bulls_label.pack()
+        self.your_bulls_label["state"] = "disabled"
+        # self.bulls_entry = Entry(self.your_outer_frame, width=3, font='Arial 8', state='disabled')
+        # self.bulls_entry.pack()
+        self.your_history_frame = LabelFrame(self.your_outer_frame, text='History of attempts', labelanchor='n', font='arial 8', padx='40')
+        self.your_history_frame.pack()
+        # self.lb001 = Label(self.your_history_frame, text="1111 1.1", font='arial 9')
+        # self.lb001.pack()
+        self.go_button = Button(self, text="OK! Go on!", width=20, command=self.go_button_clicked)
+        self.go_button.place(x=int(1.4*self.initial_main_width/2-200), y=230)
+        #self.go_button.pack(side="bottom")
+        self.attempts_label = Label(self, text="Attempts: " + str(game.attempts), font='arial 10')
+        self.attempts_label.pack(side="bottom")
 
+    def destroy_previous_window_items(self):
+        if self.my_outer_frame:
+            self.my_outer_frame.destroy()
+        if self.your_outer_frame:
+            self.your_outer_frame.destroy()
+        if self.upper_label:
+            self.upper_label.destroy()
+        if self.go_button:
+            self.go_button.destroy()
+        if self.attempts_label:
+            self.attempts_label.destroy()
+        if self.my_cows_label:
+            self.my_cows_label.destroy()
+        if self.my_cows_entry:
+            self.my_cows_entry.destroy()
+        if self.my_bulls_label:
+            self.my_bulls_label.destroy()
+        if self.my_bulls_entry:
+            self.my_bulls_entry.destroy()
+        if self.lb3_:
+            self.lb3_.destroy()
 
 class SettingWindow(Toplevel):
     width = 170
@@ -1312,7 +1561,12 @@ class SettingWindow(Toplevel):
         # self.setting_window.withdraw()
 
     def switch_dual_game(self):
-        self.main_window.geometry(f"{2 * self.main_window.initial_main_width}x{self.main_window.initial_main_height}")
+        self.game.dual_game_enabled = bool(self.cb_variable.get())
+        if self.game.dual_game_enabled:
+            self.main_window.enable_dual_game()
+        else:
+            self.main_window.enable_mono_game()
+        # self.main_window.geometry(f"{2 * self.main_window.initial_main_width}x{self.main_window.initial_main_height}")
 
 
 
@@ -1322,18 +1576,20 @@ class AboutWindow(Toplevel):
         self.your_string_entry = None
         self.parent_window = parent_window
 
-    def input_your_string(self, event):
+    def input_your_string_for_automation_mono_game(self, event):
         game = self.game
-        if game.game_started or game.new_game_requested: return
+        if game.game_started or game.new_game_requested or game.dual_game_enabled: return
         if not self.your_string_entry:
             self.geometry('280x110')
-            self.your_string_entry = Entry(self, width=6, font='Arial 8', state='normal')
+            self.your_string_entry = Entry(self, width=game.capacity+2, font='Arial 8', state='normal')
             self.your_string_entry.place(x=112, y=81)
             return
-        game.your_string = self.your_string_entry.get()
-        if not Game.validate_your_string(game.capacity, game.your_string):
-            game.your_string = None
+        your_string = strip(self.your_string_entry.get())
+        if not Game.validate_your_string(game.capacity, your_string):
+            game.your_string_for_automation_mono_game = None
             return
+        else:
+            game.your_string_for_automation_mono_game = your_string
         self.your_string_entry.delete(0, 'end')
         self.your_string_entry.destroy()
         self.your_string_entry = None
@@ -1343,10 +1599,13 @@ class AboutWindow(Toplevel):
     def automate_answer(self):
         game = self.game
         while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
-            self.parent_window.button_clicked()
-            game.calc_bulls_and_cows()
-        self.parent_window.button_clicked()  # ???
+            self.parent_window.go_button_clicked()
+            game.totqty_resp, game.rightplace_resp = game.calc_bulls_and_cows(
+                game.your_string_for_automation_mono_game, game.proposed_str)
+        self.parent_window.go_button_clicked()  # ???
 
+    def show_my_guessed_number(self, event):
+        self.button["text"] = self.game.my_string_for_you
 
 class MessageBox:
     max_messagebox_width = 470
@@ -1528,8 +1787,10 @@ def run():
     main_win = MainWin()
     main_win.game = game
     main_win.title("Bulls and Cows Game")
-    main_win.geometry(f'{main_win.initial_main_width}x{main_win.initial_main_height}')
-    main_win.resizable(0, 0)
+    if game.dual_game_enabled :
+        main_win.enable_dual_game()
+    else:
+        main_win.enable_mono_game()
     main_win.menubar = Menu(main_win)
     main_win.filemenu = Menu(main_win.menubar, tearoff=0)
     main_win.filemenu.add_command(label="New", command=main_win.new_game_clicked)
@@ -1543,30 +1804,9 @@ def run():
     main_win.helpmenu.add_command(label="About...", command=main_win.open_about_window)
     main_win.menubar.add_cascade(label="Help", menu=main_win.helpmenu)
     main_win.config(menu=main_win.menubar)
-    main_win.lb0 = Label(main_win, text="Think of a number with " + str(game.capacity) + " unique digits!",
-                         font='arial 12')
-    main_win.lb0.bind("<Double-Button-1>", main_win.mouse_function_hide)
-    main_win.lb0.bind("<Double-Button-3>", main_win.mouse_function_show)
-    main_win.lb0['fg'] = '#0d0'
-    main_win.lb0.pack(fill='none')
-    main_win.lb1 = Label(main_win, text='Enter a total number of matching digits ("cows"): ', font='arial 8')
-    main_win.lb1.pack(fill='none')
-    main_win.text1 = Entry(main_win, width=3, font='Arial 8', state='disabled')
-    main_win.text1.pack()
-    main_win.lb2 = Label(main_win, text='Enter a number of digits on the right positions ("bulls"): ', font='arial 8')
-    main_win.lb2.pack(fill='none')
-    main_win.text2 = Entry(main_win, width=3, font='Arial 8', state='disabled')
-    main_win.text2.pack()
-    main_win.button = Button(main_win, text="OK! Go on!", width=20, command=main_win.button_clicked)
-    main_win.button.pack(fill='none')
-    main_win.lb3_ = Label(main_win, text="Previous set: " + str(len(game.previous_all_set)), font='arial 5')
-    #  lb3_.pack(fill='none', side='bottom')
-    #  lb3_.pack_forget()
-    main_win.fr0 = LabelFrame(main_win, text='History of attempts', labelanchor='n', font='arial 8', padx='80')
-    main_win.lb4 = Label(main_win, text="Attempts: " + str(game.attempts), font='arial 8')
-    main_win.lb4.pack(fill='none', side='bottom')
+
     main_win.protocol('WM_DELETE_WINDOW', main_win.close)
-    main_win.open_login_window()
+    # main_win.open_login_window()
     main_win.mainloop()
 
 
