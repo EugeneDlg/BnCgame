@@ -20,8 +20,8 @@ from email.mime.multipart import MIMEMultipart
 # from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from passlib.context import CryptContext
-from datetime import time, datetime
-
+from datetime import datetime
+from time import time
 
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
 DB_CONN_STRING = "postgresql+psycopg2://postgres:dFAkc2E3TWw=@127.0.0.1:5432/bnc"
@@ -52,7 +52,7 @@ class BnCUsers(Base):
 class Privileges(Base):
     __tablename__ = PRIV_TABLE
     id = Column(Integer, primary_key=True, nullable=False)
-    login = Column(String, ForeignKey(USERS_TABLE + ".login"), nullable=False)
+    login = Column(String, ForeignKey(USERS_TABLE + ".login", ondelete="cascade"), nullable=False)
     create_other = Column(Boolean, nullable=False)
     modify_self = Column(Boolean, nullable=False)
     modify_other = Column(Boolean, nullable=False)
@@ -69,7 +69,7 @@ class Privileges(Base):
 class FixtureList(Base):
     __tablename__ = FL_TABLE
     id = Column(Integer, primary_key=True, nullable=False)
-    login = Column(String, nullable=False)
+    login = Column(String, ForeignKey(USERS_TABLE + ".login", ondelete="cascade"), nullable=False)
     winner = Column(Integer, nullable=False)
     attempts = Column(Integer, nullable=False)
     timestamp = Column(Integer, nullable=False)
@@ -222,8 +222,8 @@ class Game:
         email_msg = MIMEMultipart("alternative")
         sender_email = BNC_EMAIL
         receiver_email = email
-        receiver_email = "stayerx@gmail.com"
-        email_msg["Subject"] = "Restoring your password"
+        # receiver_email = "stayerx@gmail.com"
+        email_msg["Subject"] = "Recover your password"
         email_msg["From"] = sender_email
         email_msg["To"] = receiver_email
         text_for_restoring_password = Game.text_for_restoring_password.replace(
@@ -410,7 +410,7 @@ class Game:
             return False
         self.your_cows, self.your_bulls = self.calc_bulls_and_cows(self.my_string_for_you, your_guess_string)
         self.your_history_list.append((your_guess_string, self.your_cows, self.your_bulls))
-        if self.your_cows==self.capacity and self.your_bulls==self.capacity:
+        if self.your_cows == self.capacity and self.your_bulls == self.capacity:
             return True
         else:
             return False
@@ -510,6 +510,10 @@ class Game:
 
     @staticmethod
     def validate_user(*args, op):
+        login_pattern = re.compile(r'[^\w\-]')
+        firstname_pattern = re.compile(r'[^A-Za-z_-]')
+        lastname_pattern = re.compile(r'[^A-Za-z_-]')
+        email_pattern = re.compile(r'[\w.+$%!?\'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[a-z]{2,9}$')
         ret_message = ""
         if op == "other" or op == "modify":
             if op == "modify":
@@ -517,12 +521,12 @@ class Game:
             else:
                 login, = args
             login = login.strip().lower()
-            s0_l = re.search(r'[^\w\-]', login)
+            login_search = login_pattern.search(login)
             if 4 > len(login):
                 ret_message += "Login is too short. "
-            elif 20 < len(login):
+            elif 10 < len(login):
                 ret_message += "Login is too long. "
-            elif s0_l:
+            elif login_search:
                 ret_message += "Login contains inappropriate symbols. "
             if ret_message:
                 raise BnCException(ret_message)
@@ -538,29 +542,29 @@ class Game:
         firstname = firstname.strip()
         lastname = lastname.strip()
         email = email.strip().lower()
-        s0_l = re.search(r'[^\w\-]', login)
-        s0_em = re.search(r'[\w.+$%!?\'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[a-z]{2,9}$', email)
+        login_search = login_pattern.search(login)
+        email_search = email_pattern.search(email)
         if 4 > len(login):
             ret_message += "Login is too short. "
         elif 20 < len(login):
             ret_message += "Login is too long. "
-        elif s0_l:
+        elif login_search:
             ret_message += "Login contains inappropriate symbols. "
         ret_message += Game.validate_password(password1, password2)
         if 1 > len(firstname):
             ret_message += "First name is too short. "
         elif 20 < len(firstname):
             ret_message += "First name is too long. "
-        elif re.search(r'[^A-Za-z_-]', firstname):
-            ret_message += "Incorrect first name. "
+        elif firstname_pattern.search(firstname):
+            ret_message += "First name contains inappropriate symbols. "
         if 1 > len(lastname):
             ret_message += "Last name is too short. "
         elif 20 < len(lastname):
             ret_message += "Last name is too long. "
-        elif re.search(r'[^A-Za-z_-]', lastname):
-            ret_message += "Incorrect last name. "
-        if not s0_em:
-            ret_message += "Incorrect e-mail. "
+        elif lastname_pattern.search(lastname):
+            ret_message += "Last name contains inappropriate symbols. "
+        if not email_search:
+            ret_message += "E-mail contains inappropriate symbols. "
         if ret_message:
             raise BnCException(ret_message)
         if op == "create":
@@ -747,11 +751,11 @@ class Game:
     def write_fl_to_db(self, result_code):
 
         fl_item = FixtureList(
-            login = self.loggedin_user,
-            winner = result_code, # continue from this
-            attempts = game.attempts,
-            timestamp = game.start_timestamp,
-            duration = game.finish_timestamp - game.start_timestamp
+            login=self.loggedin_user,
+            winner=result_code,  # continue from this
+            attempts=self.attempts,
+            timestamp=self.start_timestamp,
+            duration=self.finish_timestamp - self.start_timestamp
         )
         try:
             session = Game.get_db_session()
@@ -765,7 +769,8 @@ class Game:
                 pass
             raise
 
-    def read_fl_from_db(self):
+    @staticmethod
+    def read_fl_from_db():
         try:
             session = Game.get_db_session()
             data = session.query(FixtureList).all()
@@ -798,6 +803,7 @@ class Game:
             entry = (login, first_name, last_name, winner, attempts, date, duration)
             data_for_treeview.append(entry)
         return data_for_treeview
+
 
 class AdditionalWindowMethods:
     def open_users_window(self):
@@ -952,7 +958,7 @@ class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
             Game.send_pincode(email, recovery_window.pincode)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
-            # recovery_window.close()
+            recovery_window.close()
         # recovery_window.game = self.game
 
 
@@ -1121,6 +1127,7 @@ class RecoveryPasswordWindow(UsersWindow):
 
 class MainWin(Tk, AdditionalWindowMethods):
     upper_label_normal_color = "#a11"
+
     def __init__(self):
         super().__init__()
         self.mono_game_main_height = 200
@@ -1173,8 +1180,9 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.your_guess_entry["state"] = "normal"
             self.your_cows_label["state"] = "normal"
             self.your_bulls_label["state"] = "normal"
-        game.game_started = True
-        game.start_timestamp = time.now()
+        if not game.game_started:
+            game.start_timestamp = time()
+            game.game_started = True
         if game.attempts == 0:
             game.get_new_proposed_str()
             game.think_of_number_for_you()
@@ -1225,7 +1233,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.destroy()
         self.quit()
 
-
     def new_game_clicked(self):
         if not self.game.game_started: return
         self.game.game_initials()
@@ -1251,7 +1258,7 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.enable_dual_game()
         else:
             self.enable_mono_game()
-        game.think_of_number_for_you() #???
+        game.think_of_number_for_you()  # ???
 
     def open_login_window(self):
         login_window = LoginWindow(self)
@@ -1306,8 +1313,8 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def finish_game_on_main_window(self, game_result_code):
         game = self.game
-        game.finish_timestamp = time.now()
-        if game_result_code == 0:   ####
+        game.finish_timestamp = time()
+        if game_result_code == 0:  ####
             self.upper_label['text'] = "You have broken my mind! Please be more carefull!\nThink of a new number!"
             self.upper_label['fg'] = '#f00'
         elif game_result_code == 1:
@@ -1323,7 +1330,7 @@ class MainWin(Tk, AdditionalWindowMethods):
                                        "Attempts: " + str(self.game.attempts)
             self.upper_label['fg'] = '#00a'
         self.go_button['text'] = 'Play again!'
-        #self.lb3_['text'] = "Previous set: " + str(len(self.game.previous_all_set))
+        # self.lb3_['text'] = "Previous set: " + str(len(self.game.previous_all_set))
         self.my_cows_entry.delete(0, "end")
         self.my_bulls_entry.delete(0, "end")
         self.my_cows_label["state"] = "disabled"
@@ -1345,7 +1352,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         if game_result_code > 0:
             game.write_fl_to_db(game_result_code)
 
-
     def change_data_on_window_mono_game(self):
         self.my_cows_entry.delete(0, "end")
         self.my_bulls_entry.delete(0, "end")
@@ -1365,7 +1371,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.my_history_frame.place(x=90, y=130)
         self.geometry(f'{self.initial_main_width}x{h}')
         t0 = game.my_history_list[-1]
-        my_frame_lb = Label(self.my_history_frame, text=str(t0[0]) + "  " + str(t0[1]) + "." + str(t0[2]), font='arial 9')
+        my_frame_lb = Label(self.my_history_frame, text=str(t0[0]) + "  " + str(t0[1]) + "." + str(t0[2]),
+                            font='arial 9')
         my_frame_lb.pack()
         self.my_history_lb_list.append(my_frame_lb)
 
@@ -1399,13 +1406,11 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.my_history_lb_list.append(my_frame_lb)
         item = game.your_history_list[-1]
         your_frame_lb = Label(self.your_history_frame, text=str(item[0]) + "  " + str(item[1]) + "." + str(item[2]),
-                            font='arial 9')
+                              font='arial 9')
         your_frame_lb.pack()
         self.your_history_lb_list.append(your_frame_lb)
-        self.go_button.place(x=int(1.4*self.initial_main_width/2-200),
-                             y=240+self.string_interval_history_frame*(len(game.my_history_list)-1))
-
-
+        self.go_button.place(x=int(1.4 * self.initial_main_width / 2 - 200),
+                             y=240 + self.string_interval_history_frame * (len(game.my_history_list) - 1))
 
     def open_about_window(self):
         about_window = AboutWindow(self)
@@ -1503,7 +1508,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
         self.resizable(0, 0)
         self.upper_label = Label(self, text="Think of a number with " + str(game.capacity) + " unique digits!",
-                                     font='arial 12')
+                                 font='arial 12')
         self.upper_label.bind("<Double-Button-1>", self.mouse_function_hide)
         self.upper_label.bind("<Double-Button-3>", self.mouse_function_show)
         self.upper_label['fg'] = MainWin.upper_label_normal_color
@@ -1536,8 +1541,10 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
         self.resizable(0, 0)
         self.upper_label = Label(self, text="Think of a number with " + str(game.capacity) + " unique digits!\n"
-                                 "And I will think of a number to guess for you!",
-                                     font='arial 12')
+                                                                                             "And I will think of a "
+                                                                                             "number to guess for "
+                                                                                             "you!",
+                                 font='arial 12')
         self.upper_label.bind("<Double-Button-1>", self.mouse_function_hide)
         self.upper_label.bind("<Double-Button-3>", self.mouse_function_show)
         self.upper_label['fg'] = MainWin.upper_label_normal_color
@@ -1545,7 +1552,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.upper_label.pack()
         self.my_outer_frame = LabelFrame(self, text='My part', labelanchor='n', font='arial 8', padx='40', pady='5')
         self.my_outer_frame.place(x=15, y=50)
-        self.my_upper_label = Label(self.my_outer_frame, text="I guess your number is: "+ "    ", font='arial 11')
+        self.my_upper_label = Label(self.my_outer_frame, text="I guess your number is: " + "    ", font='arial 11')
         self.my_upper_label.pack()
         self.my_upper_label["state"] = "disabled"
         self.my_cows_label = Label(self.my_outer_frame, text="Enter the number of cows: ", font='arial 11')
@@ -1560,9 +1567,10 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.my_bulls_entry = Entry(self.my_outer_frame, width=3, font='Arial 8', state='disabled')
         self.my_bulls_entry.pack()
         self.my_bulls_entry["state"] = "disabled"
-        self.my_align_label = Label(self.my_outer_frame, text="\n", font='arial 4')
+        self.my_align_label = Label(self.my_outer_frame, text="\n", font='arial 3')
         self.my_align_label.pack()
-        self.my_history_frame = LabelFrame(self.my_outer_frame, text='History of attempts', labelanchor='n', font='arial 8', padx='40')
+        self.my_history_frame = LabelFrame(self.my_outer_frame, text='History of attempts', labelanchor='n',
+                                           font='arial 8', padx='40')
         self.my_history_frame.pack()
         # self.lb002 = Label(self.my_history_frame, text="1111 1.1", font='arial 9')
         # self.lb002.pack()
@@ -1571,7 +1579,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.your_upper_label = Label(self.your_outer_frame, text="Enter your guess: ", font='arial 11')
         self.your_upper_label.pack()
         self.your_upper_label["state"] = "disabled"
-        self.your_guess_entry = Entry(self.your_outer_frame, width=game.capacity+2, font='Arial 11', state='disabled')
+        self.your_guess_entry = Entry(self.your_outer_frame, width=game.capacity + 2, font='Arial 11', state='disabled')
         self.your_guess_entry.pack()
         self.your_guess_entry["state"] = "disabled"
         self.your_cows_label = Label(self.your_outer_frame, text="You guessed cows: \n", font='arial 11')
@@ -1584,13 +1592,14 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.your_bulls_label["state"] = "disabled"
         # self.bulls_entry = Entry(self.your_outer_frame, width=3, font='Arial 8', state='disabled')
         # self.bulls_entry.pack()
-        self.your_history_frame = LabelFrame(self.your_outer_frame, text='History of attempts', labelanchor='n', font='arial 8', padx='40')
+        self.your_history_frame = LabelFrame(self.your_outer_frame, text='History of attempts', labelanchor='n',
+                                             font='arial 8', padx='40')
         self.your_history_frame.pack()
         # self.lb001 = Label(self.your_history_frame, text="1111 1.1", font='arial 9')
         # self.lb001.pack()
         self.go_button = Button(self, text="OK! Go on!", width=20, command=self.go_button_clicked)
-        self.go_button.place(x=int(1.4*self.initial_main_width/2-200), y=230)
-        #self.go_button.pack(side="bottom")
+        self.go_button.place(x=int(1.4 * self.initial_main_width / 2 - 200), y=230)
+        # self.go_button.pack(side="bottom")
         self.attempts_label = Label(self, text="Attempts: " + str(game.attempts), font='arial 10')
         self.attempts_label.pack(side="bottom")
 
@@ -1634,6 +1643,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         msgbox.grab_set()
         msgbox.focus_set()
 
+
 class SettingWindow(Toplevel):
     width = 170
     height = 70
@@ -1652,8 +1662,8 @@ class SettingWindow(Toplevel):
         self.game.capacity = new_capacity
         if self.game.dual_game_enabled:
             self.main_window.upper_label["text"] = "Think of a number with " + str(new_capacity) \
-                                                    + " unique digits!\nAnd I will think of "\
-                                                      "a number to guess for you!"
+                                                   + " unique digits!\nAnd I will think of " \
+                                                     "a number to guess for you!"
         else:
             self.main_window.upperlabel['text'] = "Think of a number with " \
                                                   + str(new_capacity) + " unique digits!"
@@ -1683,7 +1693,7 @@ class AboutWindow(Toplevel):
         if game.game_started or game.new_game_requested or game.dual_game_enabled: return
         if not self.your_string_entry:
             self.geometry('280x110')
-            self.your_string_entry = Entry(self, width=game.capacity+2, font='Arial 8', state='normal')
+            self.your_string_entry = Entry(self, width=game.capacity + 2, font='Arial 8', state='normal')
             self.your_string_entry.place(x=112, y=81)
             return
         your_string = strip(self.your_string_entry.get())
@@ -1722,11 +1732,11 @@ class FixtureListTreeview(Toplevel):
         fl_style = ttk.Style()
         fl_style.theme_use("default")
         fl_style.configure("Treeview",
-                            background="silver",
-                            foreground="black",
-                            rowheight=25,
-                            fieldbackground="silver")
-        fl_style.map("Treeview", background=[("selected", "red")])
+                           background="silver",
+                           foreground="black",
+                           rowheight=25,
+                           fieldbackground="silver")
+        fl_style.map("Treeview", background=[("selected", "grey")])
         fl_frame = ttk.Frame(self)
         fl_frame.pack()
         fl_scroll = ttk.Scrollbar(fl_frame, orient="vertical")
@@ -1736,13 +1746,13 @@ class FixtureListTreeview(Toplevel):
         fl_tree["columns"] = ("first_name", "last_name", "login", "winner",
                               "attempts", "date", "duration")
         fl_tree.column("#0", width=0, anchor="c", stretch=NO)
-        fl_tree.column("first_name", width=120,  anchor="c")
+        fl_tree.column("first_name", width=120, anchor="c")
         fl_tree.column("last_name", width=120, anchor="c")
         fl_tree.column("login", width=120, anchor="c")
-        fl_tree.column("winner", width=70,  anchor="c")
-        fl_tree.column("attempts",  width=90, anchor="c")
-        fl_tree.column("date",  width=120, anchor="c")
-        fl_tree.column("duration", width=90,anchor="c")
+        fl_tree.column("winner", width=70, anchor="c")
+        fl_tree.column("attempts", width=90, anchor="c")
+        fl_tree.column("date", width=120, anchor="c")
+        fl_tree.column("duration", width=90, anchor="c")
         fl_tree.heading("#0", text="")
         fl_tree.heading("first_name", text="First Name")
         fl_tree.heading("last_name", text="Last Name")
@@ -1757,7 +1767,7 @@ class FixtureListTreeview(Toplevel):
 
     def populate_treeview(self, fl_data):
         for row in fl_data:
-            self.fl_tree.insert(parent="", index="end",text="", values=row)
+            self.fl_tree.insert(parent="", index="end", text="", values=row)
 
 
 class MessageBox:
@@ -1959,12 +1969,13 @@ class IncorrectPasswordException(Exception):
     def __str__(self):
         return "Incorrect Password!"
 
+
 def run():
     game = Game()
     main_win = MainWin()
     main_win.game = game
     main_win.title("Bulls and Cows Game")
-    if game.dual_game_enabled :
+    if game.dual_game_enabled:
         main_win.enable_dual_game()
     else:
         main_win.enable_mono_game()
@@ -1984,7 +1995,7 @@ def run():
     main_win.config(menu=main_win.menubar)
 
     main_win.protocol('WM_DELETE_WINDOW', main_win.show_exit_message)
-    #main_win.open_login_window()
+    main_win.open_login_window()
     main_win.mainloop()
 
 
