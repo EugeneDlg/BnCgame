@@ -1,10 +1,10 @@
 import base64
 import math
 import random
+from collections import defaultdict
 import re
-import tkinter.tix
 from tkinter import *
-from tkinter import Canvas, Frame, Scrollbar, ttk, messagebox
+# from tkinter import Canvas, Frame, Scrollbar, ttk
 from itertools import permutations
 from secrets import choice
 import psycopg2
@@ -25,11 +25,18 @@ from datetime import datetime
 from time import time
 
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
-DB_CONN_STRING = "postgresql+psycopg2://postgres:dFAkc2E3TWw=@127.0.0.1:5432/bnc"
+# DB_CONN_STRING = "postgresql+psycopg2://postgres:dFAkc2E3TWw=@127.0.0.1:5432/bnc"
+# DB_CONN_STRING = "postgresql+psycopg2://bncuser:Ym5jdXNlcl9wYXNzd29yZA==" \
+#                  "@rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432/bnc"
+DB_CONN_STRING_PRE = "postgresql+psycopg2://"
+DB_SOCKET = "rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432"
+DB_NAME = "bnc"
 USERS_TABLE = "users"
 PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
 ADMIN_USER = "admin"
+DEFAULT_DB_USER = "bncuser"
+DEFAULT_DB_PASSWORD = "Ym5jdXNlcl9wYXNzd29yZA=="
 SSL_PORT = 465
 SMTP_ADDRESS = "smtp.gmail.com"
 BNC_EMAIL = "Bulls.And.Cows.0@gmail.com"
@@ -78,8 +85,6 @@ class FixtureList(Base):
 
 
 class Game:
-    session = None
-    engine = None
     text_for_restoring_password = """\
     Subject: Restoring your password
 
@@ -115,6 +120,9 @@ class Game:
         "Sending you abundant wishes for this game!",
         "Failure and success are the two sides of the same coin. So don’t get nervous!"
     ]
+    default_db_user = DEFAULT_DB_USER
+    default_db_password = DEFAULT_DB_PASSWORD
+    sessions = defaultdict(bool)
 
     def __init__(self, capacity=4):
         super().__init__()
@@ -128,46 +136,6 @@ class Game:
         self.user_privileges = None
         self.game_initials()
         self.prepare_game()
-
-        # self.setting_window = None
-        # self.help_window = None
-        # self.login_window = None
-        # self.login_window_lb0 = None
-        # self.setting_window_cap_lb = None
-        # self.setting_window_cap_en = None
-        # self.setting_window_cap_bt = None
-        # self.setting_window_lf0 = None
-        # self.setting_window_lf1 = None
-        # self.setting_window_un_lb = None
-        # self.setting_window_un_en = None
-        # self.setting_window_pw_lb = None
-        # self.setting_window_pw_en = None
-        # self.setting_window_cr_bt = None
-        # self.setting_window_dl_bt = None
-        # self.about_lb1 = None
-
-        # self.users_window = None
-        # self.users_window_login_lb = None
-        # self.users_window_login_en = None
-        # self.users_window_pass_lb = None
-        # self.users_window_pass_en = None
-        # self.users_window_firstname_lb = None
-        # self.users_window_firstname_en = None
-        # self.users_window_lastname_lb = None
-        # self.users_window_lastname_en = None
-        # self.users_window_pass_lb1 = None
-        # self.users_window_pass_en1 = None
-        # self.users_window_pass_lb2 = None
-        # self.users_window_pass_en2 = None
-        # self.password_en1 = None
-        # self.password_en2 = None
-        # self.users_window_create_bt = None
-        # self.users_window_delete_bt = None
-        # self.users_window_modify_bt = None
-        # self.users_window_show_pass_bt = None
-        # self.users_window_email_lb = None
-        # self.users_window_email_en = None
-        # self.login_window_rp_bt = None
 
     @staticmethod
     def load_logged_user_info(loggedin_user):
@@ -420,8 +388,19 @@ class Game:
         self.my_string_for_you = "".join(choice(list(permutations("0123456789", self.capacity))))
 
     @staticmethod
-    def add_user(*args):
-        login, password, firstname, lastname, email = args
+    def create_user_in_db(login_to_create, password_to_create, db_login, db_password):
+        try:
+            session = Game.get_db_session(db_login, db_password)
+            engine = session.bind.engine
+            sql_command = f"create user {login_to_create} with encrypted password '{password_to_create}'"
+            with engine.connect() as con:
+                con.execute(sql_command)
+        except Exception:
+            raise
+
+    @staticmethod
+    def create_user(*args):
+        login, password, firstname, lastname, email, db_user, db_password = args
         login = login.strip()
         password = password.strip()
         firstname = firstname.strip()
@@ -435,7 +414,7 @@ class Game:
             password=Game.encrypt_password(password)
         )
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(db_user, db_password)
             session.add(user)
             session.commit()
             session.close()
@@ -494,136 +473,6 @@ class Game:
             except:
                 pass
             raise
-
-    @staticmethod
-    def get_db_session():
-        if not Game.session:
-            m = re.search(r":([^/].+)@", DB_CONN_STRING)
-            db_conn_string = DB_CONN_STRING.replace(m.group(1), Game.base64_decode_(m.group(1)))
-            try:
-                Game.engine = create_engine(db_conn_string)
-                DBSession = sessionmaker(bind=Game.engine)
-                Game.session = DBSession()
-                return Game.session
-            except Exception:
-                raise
-        return Game.session
-
-    @staticmethod
-    def validate_user(*args, op):
-        login_pattern = re.compile(r'[^\w\-]')
-        firstname_pattern = re.compile(r'[^A-Za-z_-]')
-        lastname_pattern = re.compile(r'[^A-Za-z_-]')
-        email_pattern = re.compile(r'[\w.+$%!?\'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[a-z]{2,9}$')
-        ret_message = ""
-        if op == "other" or op == "modify":
-            if op == "modify":
-                login, password1, password2, firstname, lastname, email = args
-            else:
-                login, = args
-            login = login.strip()
-            login_search = login_pattern.search(login)
-            if 4 > len(login):
-                ret_message += "Login is too short. Login must be consisted of at least 4 symbols. "
-            elif 10 < len(login):
-                ret_message += "Login is too long. Maximum length of login is 10 symbols. "
-            elif login_search:
-                ret_message += "Login contains inappropriate symbols. "
-            if ret_message:
-                raise BnCException(ret_message)
-            r0 = Game.get_user_by_login(login)
-            if not r0:
-                raise InvalidLoginException(True)
-            if op == "other":
-                return
-        login, password1, password2, firstname, lastname, email = args
-        login = login.strip().lower()
-        password1 = password1.strip()
-        password2 = password2.strip()
-        firstname = firstname.strip()
-        lastname = lastname.strip()
-        email = email.strip().lower()
-        login_search = login_pattern.search(login)
-        email_search = email_pattern.search(email)
-        if 4 > len(login):
-            ret_message += "Login is too short. Login must be consisted of at least 4 symbols. "
-        elif 20 < len(login):
-            ret_message += "Login is too long. Maximum length of login is 10 symbols. "
-        elif login_search:
-            ret_message += "Login contains inappropriate symbols. "
-        ret_message += Game.validate_password(password1, password2)
-        if 1 > len(firstname):
-            ret_message += "First name is too short. It must consists of 1 symbol at least. "
-        elif 20 < len(firstname):
-            ret_message += "First name is too long. Maximum length of first name is 20 symbols. "
-        elif firstname_pattern.search(firstname):
-            ret_message += "First name contains inappropriate symbols. "
-        if 1 > len(lastname):
-            ret_message += "Last name is too short. It must consists of 1 symbol at least. "
-        elif 20 < len(lastname):
-            ret_message += "Last name is too long. Maximum length of last name is 20 symbols. "
-        elif lastname_pattern.search(lastname):
-            ret_message += "Last name contains inappropriate symbols. "
-        if not email_search:
-            ret_message += "E-mail contains inappropriate symbols. "
-        if ret_message:
-            raise BnCException(ret_message)
-        if op == "create":
-            try:
-                r0 = Game.get_user_by_login(login)
-                session = Game.get_db_session()
-                r1 = session.query(BnCUsers).filter_by(email=email).first()
-                session.close()
-            except Exception:
-                try:
-                    session.rollback()
-                except:
-                    pass
-                raise
-            if r0:
-                ret_message += "User with this login already exists! "
-            if r1:
-                ret_message += "User with this e-mail already exists! "
-            if ret_message:
-                raise BnCException(ret_message)
-
-    @staticmethod
-    def validate_password(password1, password2):
-        ret_message = ""
-        s0_p = re.search(r'[\W_]', password1)
-        s1_p = re.search(r'[A-Z]', password1)
-        s2_p = re.search(r'[a-z]', password1)
-        s3_p = re.search(r'[\d]', password1)
-        if password1 != password2:
-            ret_message += "Passwords don't match. "
-        elif 6 > len(password1):
-            ret_message += "Password is too short. "
-        elif 20 < len(password1):
-            ret_message += "Password is too long. "
-        elif s0_p is None or s1_p is None or s2_p is None or s3_p is None:
-            ret_message += "Password must contain at least one capital letter, one lowercase letter, one digit " + \
-                           "and one special symbol. "
-        return ret_message
-
-    @staticmethod
-    def authenticate_user(login, password_entered):
-        login = login.strip().lower()
-        try:
-            Game.validate_user(login, op="other")
-            user_data = Game.get_user_by_login(login)
-            admin_data = Game.get_user_by_login(ADMIN_USER)
-        except Exception:
-            raise
-        if not user_data:
-            raise BnCException("User not found!")
-        # match = re.search(r"password=\'(.*)\'", str(r0))
-        password_hashed = user_data.password
-        try:
-            Game.check_password(password_entered, password_hashed)
-        except Exception:
-            raise
-        if not admin_data:
-            raise NoAdminException
 
     @staticmethod
     def get_user_by_login(login):
@@ -698,6 +547,142 @@ class Game:
             op = op + "_other"
         return self.user_privileges[op]
 
+    @staticmethod
+    def get_db_session(user=default_db_user, password=default_db_password):
+        if not Game.sessions[user]:
+            if user == Game.default_db_user:
+                password = Game.base64_decode_(password)
+            db_conn_string = DB_CONN_STRING_PRE + user + ":" + password + "@" \
+                             + DB_SOCKET + "/" + DB_NAME
+            # m = re.search(r":([^/].+)@", DB_CONN_STRING)
+            # db_conn_string = DB_CONN_STRING.replace(m.group(1), Game.base64_decode_(m.group(1)))
+            try:
+                engine = create_engine(db_conn_string)
+                DBSession = sessionmaker(bind=engine)
+                Game.sessions[user] = DBSession()
+                return Game.sessions[user]
+            except Exception:
+                raise
+        return Game.sessions[user]
+
+    @staticmethod
+    def validate_user(*args, op):
+        login_pattern = re.compile(r'[^\w\-]')
+        firstname_pattern = re.compile(r'[^A-Za-z_-]')
+        lastname_pattern = re.compile(r'[^A-Za-z_-]')
+        email_pattern = re.compile(r'[\w.+$%!?\'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[a-z]{2,9}$')
+        ret_message = ""
+        if op == "other" or op == "modify":
+            if op == "modify":
+                login, password1, password2, firstname, lastname, email = args
+            else:
+                login, = args
+            login = login.strip()
+            login_search = login_pattern.search(login)
+            if 4 > len(login):
+                ret_message += "Login is too short. Login must consist of at least 4 symbols. "
+            elif 10 < len(login):
+                ret_message += "Login is too long. Maximum length of login is 10 symbols. "
+            elif login_search:
+                ret_message += "Login contains inappropriate symbols. "
+            if ret_message:
+                raise BnCException(ret_message)
+            r0 = Game.get_user_by_login(login)
+            if not r0:
+                raise InvalidLoginException(True)
+            if op == "other":
+                return
+        login, password1, password2, firstname, lastname, email = args
+        login = login.strip().lower()
+        password1 = password1.strip()
+        password2 = password2.strip()
+        firstname = firstname.strip()
+        lastname = lastname.strip()
+        email = email.strip().lower()
+        login_search = login_pattern.search(login)
+        email_search = email_pattern.search(email)
+        if 4 > len(login):
+            ret_message += "Login is too short. Login must consist of at least 4 symbols. "
+        elif 20 < len(login):
+            ret_message += "Login is too long. Maximal length of login is 10 symbols. "
+        elif login_search:
+            ret_message += "Login contains inappropriate symbols. "
+        ret_message += Game.validate_password(password1, password2)
+        if 1 > len(firstname):
+            ret_message += "First name is too short. It must consist of 1 symbol at least. "
+        elif 20 < len(firstname):
+            ret_message += "First name is too long. Maximal length of first name is 20 symbols. "
+        elif firstname_pattern.search(firstname):
+            ret_message += "First name contains inappropriate symbols. "
+        if 1 > len(lastname):
+            ret_message += "Last name is too short. It must consist of 1 symbol at least. "
+        elif 20 < len(lastname):
+            ret_message += "Last name is too long. Maximal length of last name is 20 symbols. "
+        elif lastname_pattern.search(lastname):
+            ret_message += "Last name contains inappropriate symbols. "
+        if not email_search:
+            ret_message += "E-mail contains inappropriate symbols. "
+        if ret_message:
+            raise BnCException(ret_message)
+        if op == "create":
+            try:
+                r0 = Game.get_user_by_login(login)
+                session = Game.get_db_session()
+                r1 = session.query(BnCUsers).filter_by(email=email).first()
+                session.close()
+            except Exception:
+                try:
+                    session.rollback()
+                except:
+                    pass
+                raise
+            if r0:
+                ret_message += "User with this login already exists! "
+            if r1:
+                ret_message += "User with this e-mail already exists! "
+            if ret_message:
+                raise BnCException(ret_message)
+
+    @staticmethod
+    def validate_password(password1, password2):
+        ret_message = ""
+        s0_p = re.search(r'[\W_]', password1)
+        s1_p = re.search(r'[A-Z]', password1)
+        s2_p = re.search(r'[a-z]', password1)
+        s3_p = re.search(r'[\d]', password1)
+        if password1 != password2:
+            ret_message += "Passwords don't match. "
+        elif 6 > len(password1):
+            ret_message += "Password is too short. Minimal length of password is 6 symbols. "
+        elif 15 < len(password1):
+            ret_message += "Password is too long. Maximal length of password is 15 symbols"
+        elif s0_p is None or s1_p is None or s2_p is None or s3_p is None:
+            ret_message += "Password must contain at least one capital letter, one lowercase letter, one digit " + \
+                           "and one special symbol. "
+        return ret_message
+
+    @staticmethod
+    def authenticate_user(login, password_entered):
+        login = login.strip().lower()
+        try:
+            Game.validate_user(login, op="other")
+            user_data = Game.get_user_by_login(login)
+            admin_data = Game.get_user_by_login(ADMIN_USER)
+        except Exception:
+            raise
+        if not user_data:
+            raise BnCException("User not found!")
+        # match = re.search(r"password=\'(.*)\'", str(r0))
+        password_hashed = user_data.password
+        try:
+            Game.check_password(password_entered, password_hashed)
+        except Exception:
+            raise
+        if not admin_data:
+            raise NoAdminException
+
+
+
     def prepare_game(self):
         try:
             self.prepare_db()
@@ -709,14 +694,14 @@ class Game:
     @staticmethod
     def prepare_db():
         try:
-            Game.get_db_session()
-            inspection = inspect(Game.engine)
+            session = Game.get_db_session()
+            inspection = inspect(session.bind.engine)
             if not (inspection.has_table(USERS_TABLE)
                     and inspection.has_table(PRIV_TABLE)
                     and inspection.has_table(FL_TABLE)):
                 # if not (Game.engine.has_table(USERS_TABLE)
                 #         and Game.engine.has_table(PRIV_TABLE)):
-                Base.metadata.create_all(Game.engine)
+                Base.metadata.create_all(session.bind.engine)
         except DatabaseError:
             raise
         except Exception:
@@ -869,7 +854,7 @@ class AdditionalWindowMethods:
         users_window.protocol('WM_DELETE_WINDOW', users_window.close)
 
 
-class LoginWindow(tkinter.Toplevel, AdditionalWindowMethods):
+class LoginWindow(Toplevel, AdditionalWindowMethods):
     width = 360
     height = 180
 
@@ -996,30 +981,30 @@ class UsersWindow(Toplevel):
         firstname = self.firstname_entry.get().strip()
         lastname = self.lastname_entry.get().strip()
         email = self.email_entry.get().strip()
+        db_user = game.loggedin_user if game.loggedin_user else Game.default_db_user
+        db_password = None if game.loggedin_user else Game.default_db_password
         if game.loggedin_user and not game.apply_privileges("create", False):
             MessageBox.show_message(self, ErrorMessage("You have no right to create a user (you are not Administrator)"))
             return
         try:
             Game.validate_user(login, password1, password2, firstname, lastname, email, op="create")
+            Game.create_user_in_db(login, password1, db_user, db_password)
+            Game.create_user(login, password1, firstname, lastname, email, db_user, db_password)
+            Game.create_user_privileges(login)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
-        try:
-            Game.add_user(login, password1, firstname, lastname, email)
-        except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(exc))
-            return
+        # try:
+        #     Game.create_user_in_db(login, password1, db_user, db_password)
+        # except Exception as exc:
+        #     MessageBox.show_message(self, ErrorMessage(exc))
+        #     return
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
         self.password_entry2.delete(0, 'end')
         self.firstname_entry.delete(0, 'end')
         self.lastname_entry.delete(0, 'end')
         self.email_entry.delete(0, 'end')
-        try:
-            Game.create_user_privileges(login)
-        except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(exc))
-            return
         MessageBox.show_message(self, InfoMessage("User successfully created"))
 
     def delete_user_eh(self):
@@ -1039,6 +1024,8 @@ class UsersWindow(Toplevel):
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
+
+
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
         self.password_entry2.delete(0, 'end')
@@ -1063,6 +1050,7 @@ class UsersWindow(Toplevel):
         email = self.email_entry.get()
         if game.loggedin_user and not game.apply_privileges("modify", login == game.loggedin_user):
             MessageBox.show_message(self, ErrorMessage("You have no right to modify the user (you are not Administrator)"))
+            # messagebox.showerror(title="Error", message="You have no right to modify the user (you are not Administrator)")
             return
         try:
             Game.validate_user(login, password1, password2, firstname, lastname, email, op="modify")
@@ -1139,6 +1127,12 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.dual_game_main_height = self.mono_game_main_height + 100
         self.dual_game_main_width = int(1.4 * self.mono_game_main_width)
         self.string_interval_history_frame = 22
+        self.info_pic = PhotoImage(file="info_pic.gif")
+        self.error_pic = PhotoImage(file="error_pic.gif")
+        self.warning_pic = PhotoImage(file="warning_pic.gif")
+        LabelPics.info_pic = self.info_pic
+        LabelPics.error_pic = self.error_pic
+        LabelPics.warning_pic = self.warning_pic
         self.windows_initials()
 
     def windows_initials(self):
@@ -1321,6 +1315,20 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def donothing(self):
         pass
+        r0 = Toplevel(self)
+        r0.geometry("500x500")
+        r0.resizable(0, 0)
+        f = Frame(r0)
+        msgbox_pic = Label(f, image=self.info_pic)
+        msgbox_pic.pack(expand="y")
+        f.pack()
+        # login_window.exit_button = Button(login_window, text='Exit', font='arial 10',
+        #                                   command=self.quit)
+        # login_window.exit_button.place(x=285, y=120)
+        # # msgbox_lb = Label(r0, text="AAAAAAAAAa", font='arial 10', anchor='w')
+        # # msgbox_lb.pack(fill='none')
+
+
 
     # def finish_game(self, set_size, label_text, label_color):
     #     # self.game_initials()
@@ -1482,7 +1490,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.resizable(0, 0)
         # self.setting_window_lf0 = LabelFrame(self.setting_window, text='Capacity:', labelanchor='n', font='arial 8', padx=30, pady=4)
         # self.setting_window_lf0.place(x=10, y=5)
-        setting_window.cap_label = Label(setting_window, text='Capacity:', font='arial 8')
+        setting_window.cap_label = Label(setting_window, text='Capacity:', font='arial 8',anchor="e")
         setting_window.cap_label.place(x=10, y=13)
         setting_window.cap_button = Button(setting_window, text='Apply', font='arial 7',
                                            command=setting_window.get_capacity)
@@ -1566,7 +1574,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         game = self.game
         self.destroy_previous_window_items()
         self.windows_initials()
-        self.initial_main_width = self.dual_game_main_width
+        self.initial_main_width = self.dual_game_main_width - 10
         self.initial_main_height = self.dual_game_main_height
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
         self.resizable(0, 0)
@@ -1608,7 +1616,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.your_upper_label = Label(self.your_outer_frame, text="Enter your guess: ", font='arial 11')
         self.your_upper_label.pack()
         self.your_upper_label["state"] = "disabled"
-        self.your_guess_entry = Entry(self.your_outer_frame, width=game.capacity + 2, font='Arial 11', state='disabled')
+        self.your_guess_entry = Entry(self.your_outer_frame, width=game.capacity + 2, font='Arial 10', state='disabled')
         self.your_guess_entry.pack()
         self.your_guess_entry["state"] = "disabled"
         self.your_cows_label = Label(self.your_outer_frame, text="You guessed cows: \n", font='arial 11')
@@ -1668,6 +1676,9 @@ class MainWin(Tk, AdditionalWindowMethods):
         msgbox.title("")
         msgbox.geometry(str(exit_message_width) + 'x' + str(exit_message_height))
         msgbox.resizable(0, 0)
+        # pic = PhotoImage(file="index.png")
+        # msgbox_pic = Label(msgbox, image=pic)
+        # msgbox_pic.pack()
         msgbox_lb = Label(msgbox, text=text, font='arial 12', anchor='w')
         msgbox_lb.pack(fill='none')
         msgbox_yes_bt = Button(msgbox, text="Yes", width=8, command=lambda: self.close())
@@ -1828,7 +1839,7 @@ class MessageBox:
 
     @staticmethod
     def show_message(parent_window, msg):
-        def myclose():
+        def close():
             if parent_window:
                 parent_window.grab_set()
             if isinstance(parent_window, LoginWindow) and isinstance(msg, InfoMessage):
@@ -1839,7 +1850,6 @@ class MessageBox:
             messagebox.destroy()
 
         text = str(msg.text).strip()
-        msg_len = len(text)
         initial_text = text.split("\n")[0]  # ???
         r_list = []
         longest_length = 0
@@ -1850,7 +1860,7 @@ class MessageBox:
             initial_text_list = initial_text.split(" ")
             result_str = ''
             for c in initial_text_list:
-                if len(result_str) < 40:
+                if len(result_str + " " + c) < 40:
                     result_str += " " + c
                 else:
                     # result_str += " " + c
@@ -1865,18 +1875,20 @@ class MessageBox:
         else:
             number_of_rows = len(r_list)
         max_messagebox_width = longest_length * 10 + 30
-        # max_messagebox_width = MessageBox.max_messagebox_width - (50 // len(sorted(text_list, key=lambda c: len(c),
-        #                                                                            reverse=True)[0])) * 10
-        max_messagebox_height = number_of_rows * 20 + 20
+        max_messagebox_height = number_of_rows * 20 + 70
         messagebox = Toplevel(parent_window) if parent_window else Tk()
         messagebox.title(msg.title)
         messagebox.geometry(str(max_messagebox_width) + 'x' + str(max_messagebox_height))
         messagebox.resizable(0, 0)
-        # messagebox.wm_attributes('-topmost', 'yes')
+        # pic = PhotoImage(file="index.png")
+        # pic = PhotoImage(file="info-icon.gif")
+        msgbox_pic = Label(messagebox, image=msg.label_pic)
+        msgbox_pic.pack(side="left", padx=30)
         msgbox_lb = Label(messagebox, text=total_text, font='arial 10', anchor='w')
-        msgbox_lb.pack(fill='none')
-        msgbox_bt = Button(messagebox, text="OK", width=12, command=lambda: myclose())
-        msgbox_bt.pack(fill='none')
+        msgbox_lb.place(x=100, y=20)
+        msgbox_bt = Button(messagebox, text="OK", width=12, command=close)
+        msgbox_bt.place(x=int(max_messagebox_width/2-40), y=max_messagebox_height-40)
+        messagebox.protocol('WM_DELETE_WINDOW', close)
         if parent_window:
             messagebox.transient(parent_window)
             messagebox.grab_set()
@@ -1892,22 +1904,6 @@ class ExitMessage:
 
     def __init__(self, parent_window):
         self.parent_window = parent_window
-
-    def show_exit_message(self, parent_window):
-        msgbox = Toplevel(parent_window)
-        msgbox.title("")
-        msgbox.geometry(str(self.exitmessage_width) + 'x' + str(self.exitmessage_height))
-        msgbox.resizable(0, 0)
-        # messagebox.wm_attributes('-topmost', 'yes')
-        msgbox_lb = Label(messagebox, text=self.text, font='arial 10', anchor='w')
-        msgbox_lb.pack(fill='none')
-        msgbox_yes_bt = Button(messagebox, text="Yes", width=12, command=lambda: parent_window.close())
-        msgbox_yes_bt.pack(fill='none')
-        msgbox_no_bt = Button(messagebox, text="No", width=12, command=lambda: msgbox.close())
-        msgbox_no_bt.pack(fill='none')
-        msgbox.transient(parent_window)
-        msgbox.grab_set()
-        msgbox.focus_set()
 
 
 class ResponseMsg:
@@ -1951,6 +1947,7 @@ class InfoMessage(BaseMessage):
     def __init__(self, msg):
         super().__init__(msg)
         self.title = InfoMessage.title
+        self.label_pic = LabelPics.info_pic
 
 
 class WarningMessage(BaseMessage):
@@ -1959,14 +1956,16 @@ class WarningMessage(BaseMessage):
     def __init__(self, msg):
         super().__init__(msg)
         self.title = WarningMessage.title
+        self.label_pic = LabelPics.warning_pic
 
 
 class ErrorMessage(BaseMessage):
-    title = "ERROR"
+    title = "Error"
 
     def __init__(self, msg):
         super().__init__(msg)
         self.title = ErrorMessage.title
+        self.label_pic = LabelPics.error_pic
 
 
 class BnCException(Exception):
@@ -2017,6 +2016,12 @@ class IncorrectPasswordException(Exception):
         return "Incorrect Password!"
 
 
+class LabelPics:
+    error_pic = None
+    info_pic = None
+    warning_pic = None
+
+
 def run():
     game = Game()
     main_win = MainWin()
@@ -2041,8 +2046,9 @@ def run():
     main_win.helpmenu.add_command(label="About...", command=main_win.open_about_window)
     main_win.menubar.add_cascade(label="Help", menu=main_win.helpmenu)
     main_win.config(menu=main_win.menubar)
-
+    main_win.pic = PhotoImage(file="index.png")
     main_win.protocol('WM_DELETE_WINDOW', main_win.show_exit_message)
+    # main_win.iconbitmap("bnc.ico")
     main_win.open_login_window()
     main_win.mainloop()
 
