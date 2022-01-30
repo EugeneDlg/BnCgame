@@ -1,12 +1,20 @@
 import base64
 import math
 import random
-from collections import defaultdict
 import re
-from tkinter import *
-# from tkinter import Canvas, Frame, Scrollbar, ttk
+from collections import defaultdict
 from itertools import permutations
 from secrets import choice
+from datetime import datetime
+from time import time
+from tkinter import *
+from tkinter import Canvas, Frame, Scrollbar, ttk
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from passlib.context import CryptContext
+
 import psycopg2
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Date
 from sqlalchemy import create_engine, inspect
@@ -14,20 +22,12 @@ from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
 from sqlalchemy.orm.session import close_all_sessions
-import smtplib
-import ssl
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-# from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
-from passlib.context import CryptContext
-from datetime import datetime
-from time import time
+
+
+
 
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
-# DB_CONN_STRING = "postgresql+psycopg2://postgres:dFAkc2E3TWw=@127.0.0.1:5432/bnc"
-# DB_CONN_STRING = "postgresql+psycopg2://bncuser:Ym5jdXNlcl9wYXNzd29yZA==" \
-#                  "@rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432/bnc"
 DB_CONN_STRING_PRE = "postgresql+psycopg2://"
 DB_SOCKET = "rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432"
 DB_NAME = "bnc"
@@ -35,11 +35,16 @@ USERS_TABLE = "users"
 PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
 ADMIN_USER = "admin"
-DEFAULT_DB_USER = "bncuser"
-DEFAULT_DB_PASSWORD = "Ym5jdXNlcl9wYXNzd29yZA=="
+DEFAULT_DB_USER = "bnc_default"
+# DEFAULT_DB_USER = "postgres"
+DEFAULT_DB_PASSWORD = "Ym5jZGZsdDEh"
+# DEFAULT_DB_PASSWORD = "dFAkc2E3TWw="
+DB_COMMON_ROLE = "bnc_user"
+DB_ADMIN_ROLE = "bnc_admin"
 SSL_PORT = 465
 SMTP_ADDRESS = "smtp.gmail.com"
 BNC_EMAIL = "Bulls.And.Cows.0@gmail.com"
+
 Base = declarative_base()
 
 
@@ -122,6 +127,8 @@ class Game:
     ]
     default_db_user = DEFAULT_DB_USER
     default_db_password = DEFAULT_DB_PASSWORD
+    db_common_role = DB_COMMON_ROLE
+    db_admin_role = DB_ADMIN_ROLE
     sessions = defaultdict(bool)
 
     def __init__(self, capacity=4):
@@ -134,13 +141,13 @@ class Game:
         self.loggedin_user = None
         self.dual_game_enabled = True
         self.user_privileges = None
-        self.game_initials()
         self.prepare_game()
+        self.game_initials()
 
     @staticmethod
     def load_logged_user_info(loggedin_user):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(loggedin_user, "")
             r = session.query(BnCUsers).filter_by(login=loggedin_user).first()
             session.close()
         except Exception:
@@ -388,11 +395,35 @@ class Game:
         self.my_string_for_you = "".join(choice(list(permutations("0123456789", self.capacity))))
 
     @staticmethod
-    def create_user_in_db(login_to_create, password_to_create, db_login, db_password):
+    def create_user_as_role(login_to_create, password_to_create, db_login, db_password):
         try:
             session = Game.get_db_session(db_login, db_password)
             engine = session.bind.engine
-            sql_command = f"create user {login_to_create} with encrypted password '{password_to_create}'"
+            sql_command = f"create user {login_to_create} with createrole " \
+                          f"encrypted password '{password_to_create}' in role {Game.db_common_role}"
+            with engine.connect() as con:
+                con.execute(sql_command)
+        except Exception:
+            raise
+
+    @staticmethod
+    def modify_user_as_role(login_to_modify, password_to_modify):
+        try:
+            session = Game.get_db_session()
+            engine = session.bind.engine
+            sql_command = f"alter role {login_to_modify} with encrypted password '{password_to_modify}'"
+            Game.get_db_session(login_to_modify, password_to_modify)
+            with engine.connect() as con:
+                con.execute(sql_command)
+        except Exception:
+            raise
+
+    @staticmethod
+    def delete_user_as_role(login_to_delete):
+        try:
+            session = Game.get_db_session()
+            engine = session.bind.engine
+            sql_command = f"drop role {login_to_delete}"
             with engine.connect() as con:
                 con.execute(sql_command)
         except Exception:
@@ -400,7 +431,7 @@ class Game:
 
     @staticmethod
     def create_user(*args):
-        login, password, firstname, lastname, email, db_user, db_password = args
+        login, password, firstname, lastname, email, db_user = args
         login = login.strip()
         password = password.strip()
         firstname = firstname.strip()
@@ -414,7 +445,7 @@ class Game:
             password=Game.encrypt_password(password)
         )
         try:
-            session = Game.get_db_session(db_user, db_password)
+            session = Game.get_db_session(db_user, "")
             session.add(user)
             session.commit()
             session.close()
@@ -428,18 +459,18 @@ class Game:
     @staticmethod
     def modify_user(*args, only_password):
         if only_password:
-            login, password = args
+            login, password, db_user = args
             login = login.strip().lower()
             password = password.strip()
         else:
-            login, password, firstname, lastname, email = args
+            login, password, firstname, lastname, email, db_user= args
             login = login.strip().lower()
             password = password.strip()
             firstname = firstname.strip()
             lastname = lastname.strip()
             email = email.strip().lower()
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(db_user, "")
             if only_password:
                 session.query(BnCUsers).filter_by(login=login).update({"login": login,
                                                                        "password": Game.encrypt_password(password)})
@@ -459,12 +490,12 @@ class Game:
             raise
 
     @staticmethod
-    def delete_user(login):
+    def delete_user(login, db_user):
         login = login.strip().lower()
         try:
-            session = Game.get_db_session()
-            session.query(Privileges).filter_by(login=login).delete()
-            session.query(BnCUsers).filter_by(login=login).delete()
+            session = Game.get_db_session(db_user, "")
+            # session.query(Privileges).filter_by(login=login).delete()
+            session.query(BnCUsers).filter_by(login=login).delete() # cascade deleting in DB (from all referenced tables)
             session.commit()
             session.close()
         except Exception as err:
@@ -517,7 +548,7 @@ class Game:
             delete_other=user_priv["delete_other"]
         )
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(login, "")
             session.add(privileges)
             session.commit()
             session.close()
@@ -531,7 +562,7 @@ class Game:
     @staticmethod
     def delete_user_privileges(login):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(login, "")
             session.query(Privileges).filter_by(login=login).delete()
             session.commit()
             session.close()
@@ -580,7 +611,8 @@ class Game:
             login = login.strip()
             login_search = login_pattern.search(login)
             if 4 > len(login):
-                ret_message += "Login is too short. Login must consist of at least 4 symbols. "
+                # ret_message += "Login is too short. Login must consist of at least 4 symbols. "
+                ret_message += "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaj"
             elif 10 < len(login):
                 ret_message += "Login is too long. Maximum length of login is 10 symbols. "
             elif login_search:
@@ -699,11 +731,8 @@ class Game:
             if not (inspection.has_table(USERS_TABLE)
                     and inspection.has_table(PRIV_TABLE)
                     and inspection.has_table(FL_TABLE)):
-                # if not (Game.engine.has_table(USERS_TABLE)
-                #         and Game.engine.has_table(PRIV_TABLE)):
-                Base.metadata.create_all(session.bind.engine)
-        except DatabaseError:
-            raise
+                raise BnCException("Database error. No necessary db tables.")
+                # Base.metadata.create_all(session.bind.engine)
         except Exception:
             raise
 
@@ -744,7 +773,7 @@ class Game:
             duration=math.ceil(self.finish_timestamp-self.start_timestamp)/60
         )
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(self.loggedin_user, "")
             session.add(fl_item)
             session.commit()
             session.close()
@@ -755,10 +784,9 @@ class Game:
                 pass
             raise
 
-    @staticmethod
-    def read_fl_from_db():
+    def read_fl_from_db(self):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(self.loggedin_user, "")
             data = session.query(FixtureList).all()
             session.close()
         except Exception:
@@ -796,6 +824,7 @@ class AdditionalWindowMethods:
         users_window = UsersWindow(self)
         # self.current_window = self.users_window
         users_window.game = self.game
+        users_window.main_win = self
         users_window.title("Manage user profiles")
         users_window.geometry(str(UsersWindow.width) + 'x' + str(UsersWindow.height))
         users_window.resizable(0, 0)
@@ -875,18 +904,17 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
         except Exception as err:
             MessageBox.show_message(self, ErrorMessage(str(err)))
             return
-        self.game.loggedin_user = login
         try:
             self.game.retrieve_user_privileges(login)
         except Exception as err:
             MessageBox.show_message(self, ErrorMessage(str(err)))
             return
+        self.game.loggedin_user = login
+        Game.get_db_session(login, password) #remember the session for the logged in user
         r_msg = "You've successfully logged in!"
         if admin_needed:
             r_msg += " Please do not forget to create Administrator user (login \"admin\")."
         MessageBox.show_message(self, InfoMessage(r_msg))
-        # self.grab_release()
-        # self.withdraw()
 
     def open_restore_password_window(self):
         login = self.login_entry.get().strip().lower()
@@ -982,23 +1010,20 @@ class UsersWindow(Toplevel):
         lastname = self.lastname_entry.get().strip()
         email = self.email_entry.get().strip()
         db_user = game.loggedin_user if game.loggedin_user else Game.default_db_user
-        db_password = None if game.loggedin_user else Game.default_db_password
+        db_password = "" if game.loggedin_user else Game.base64_decode_(Game.default_db_password)
         if game.loggedin_user and not game.apply_privileges("create", False):
             MessageBox.show_message(self, ErrorMessage("You have no right to create a user (you are not Administrator)"))
             return
         try:
             Game.validate_user(login, password1, password2, firstname, lastname, email, op="create")
-            Game.create_user_in_db(login, password1, db_user, db_password)
-            Game.create_user(login, password1, firstname, lastname, email, db_user, db_password)
+            Game.create_user_as_role(login, password1, db_user, db_password)
+            if not game.loggedin_user:
+                Game.get_db_session(login, password1)
+            Game.create_user(login, password1, firstname, lastname, email, db_user)
             Game.create_user_privileges(login)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
-        # try:
-        #     Game.create_user_in_db(login, password1, db_user, db_password)
-        # except Exception as exc:
-        #     MessageBox.show_message(self, ErrorMessage(exc))
-        #     return
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
         self.password_entry2.delete(0, 'end')
@@ -1019,24 +1044,24 @@ class UsersWindow(Toplevel):
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
-        try:
-            Game.delete_user(login)
-        except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(exc))
+        if game.loggedin_user == login:
+            self.login_for_deleting = login
+            if game.game_started:
+                text = "You are about to remove your account. Therefore the game will be finished " \
+                       "and you will be logged out. Are you sure to proceed?"
+            else:
+                text = "You are about to remove your account. You will be logged out." \
+                       " Are you sure to proceed?"
+            msg = WarningMessage(text)
+            MessageBox.show_logout_message(self, msg, True) # continue from this
             return
-
-
+        self.proceed_deleting(login)
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
         self.password_entry2.delete(0, 'end')
         self.firstname_entry.delete(0, 'end')
         self.lastname_entry.delete(0, 'end')
         self.email_entry.delete(0, 'end')
-        try:
-            Game.delete_user_privileges(login)
-        except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(exc))
-            return
         MessageBox.show_message(self, InfoMessage("User successfully deleted"))
 
     def modify_user_eh(self):
@@ -1053,12 +1078,9 @@ class UsersWindow(Toplevel):
             # messagebox.showerror(title="Error", message="You have no right to modify the user (you are not Administrator)")
             return
         try:
+            Game.modify_user_as_role(login, password1)
             Game.validate_user(login, password1, password2, firstname, lastname, email, op="modify")
-        except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(exc))
-            return
-        try:
-            Game.modify_user(login, password1, firstname, lastname, email, only_password=False)
+            Game.modify_user(login, password1, firstname, lastname, email, game.loggedin_user, only_password=False)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
@@ -1069,6 +1091,16 @@ class UsersWindow(Toplevel):
         self.lastname_entry.delete(0, 'end')
         self.email_entry.delete(0, 'end')
         MessageBox.show_message(self, InfoMessage("User successfully modified"))
+
+    def proceed_deleting(self, login):
+        game = self.game
+        try:
+            Game.delete_user(login, game.loggedin_user)
+            # Game.delete_user_privileges(login)
+            Game.delete_user_as_role(login)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
+            return
 
 
 class RecoveryPasswordWindow(UsersWindow):
@@ -1088,12 +1120,14 @@ class RecoveryPasswordWindow(UsersWindow):
         login = self.login
         password1 = self.password_entry1.get().strip()
         password2 = self.password_entry2.get().strip()
+
         r_msg = Game.validate_password(password1, password2)
         if r_msg:
             MessageBox.show_message(self, ErrorMessage(r_msg))
             return
         try:
-            Game.modify_user(login, password1, only_password=True)
+            Game.modify_user_as_role(login, password1)
+            Game.modify_user(login, password1, login, only_password=True)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
@@ -1155,6 +1189,24 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.my_history_lb_list = list()
         self.your_history_lb_list = list()
         self.count = 0
+
+    def show_main_window_menu(self):
+        self.menubar = Menu(self)
+        self.filemenu = Menu(self.menubar, tearoff=0)
+        self.filemenu.add_command(label="New", command=self.new_game_clicked)
+        self.filemenu.add_command(label="Settings", command=self.open_setting_window)
+        self.filemenu.add_command(label="Users", command=self.open_users_window)
+        self.filemenu.add_command(label="Fixture List", command=self.open_fixture_list_window)
+        self.filemenu.add_separator()
+        self.filemenu.add_command(label="Logout", command=self.logout)
+        self.filemenu.add_command(label="Exit", command=self.show_exit_message)
+        self.menubar.add_cascade(label="File", menu=self.filemenu)
+        self.helpmenu = Menu(self.menubar, tearoff=0)
+        self.helpmenu.add_command(label="Description", command=self.open_description_window)
+        self.helpmenu.add_command(label="About...", command=self.open_about_window)
+        self.menubar.add_cascade(label="Help", menu=self.helpmenu)
+        self.config(menu=self.menubar)
+        self.protocol('WM_DELETE_WINDOW', self.show_exit_message)
 
     def go_button_clicked(self):
         game = self.game
@@ -1243,10 +1295,6 @@ class MainWin(Tk, AdditionalWindowMethods):
     def mouse_function_show(self, event):
         self.lb3_.pack(fill='none', side='bottom')
 
-    def close(self):
-        self.destroy()
-        self.quit()
-
     def new_game_clicked(self):
         if not self.game.game_started: return
         self.game.game_initials()
@@ -1274,70 +1322,12 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.enable_mono_game()
         game.think_of_number_for_you()  # ???
 
-    def open_login_window(self):
-        login_window = LoginWindow(self)
-        login_window.main_win = self
-        login_window.game = self.game
-        login_window.geometry(str(login_window.width) + 'x' + str(login_window.height))
-        login_window.resizable(0, 0)
-        # self.login_window.wm_attributes('-topmost', 'yes')
-        login_window.label0 = Label(login_window, text='Please enter your login and password: ',
-                                    font='TimesNewRoman 12', fg='#e0e')
-        login_window.label0.place(x=40, y=10)
-        login_window.login_label = Label(login_window, text='Login:', font='Arial 10')
-        login_window.login_label.place(x=10, y=40)
-        login_window.login_entry = Entry(login_window, width=25, font='Arial 10', state='normal')
-        login_window.login_entry.place(x=100, y=40)
-        login_window.password_label = Label(login_window, text='Password:', font='arial 10')
-        login_window.password_label.place(x=10, y=80)
-        login_window.password_entry = Entry(login_window, width=25, font='Arial 10', show='*', state='normal')
-        login_window.password_entry.place(x=100, y=80)
-        login_window.login_button = Button(login_window, text='Login', font='arial 10',
-                                           command=login_window.authenticate_user_eh)
-        login_window.login_button.place(x=30, y=120)
-        login_window.new_user_button = Button(login_window, text='New user...', font='arial 10',
-                                              command=login_window.open_users_window)
-        login_window.new_user_button.place(x=90, y=120)
-        login_window.recovery_button = Button(login_window, text='Reset password...', font='arial 6',
-                                              command=login_window.open_restore_password_window)
-        login_window.recovery_button.place(x=188, y=126)
-        login_window.exit_button = Button(login_window, text='Exit', font='arial 10',
-                                          command=self.quit)
-        login_window.exit_button.place(x=285, y=120)
-        login_window.transient(self)
-        login_window.grab_set()
-        login_window.focus_set()
-        login_window.protocol("WM_DELETE_WINDOW", self.quit)
-
     @staticmethod
     def disable_event():
         pass
 
     def donothing(self):
         pass
-        r0 = Toplevel(self)
-        r0.geometry("500x500")
-        r0.resizable(0, 0)
-        f = Frame(r0)
-        msgbox_pic = Label(f, image=self.info_pic)
-        msgbox_pic.pack(expand="y")
-        f.pack()
-        # login_window.exit_button = Button(login_window, text='Exit', font='arial 10',
-        #                                   command=self.quit)
-        # login_window.exit_button.place(x=285, y=120)
-        # # msgbox_lb = Label(r0, text="AAAAAAAAAa", font='arial 10', anchor='w')
-        # # msgbox_lb.pack(fill='none')
-
-
-
-    # def finish_game(self, set_size, label_text, label_color):
-    #     # self.game_initials()
-    #     self.lb3_['text'] = "Previous set: " + str(set_size)
-    #     self.lb0['text'] = label_text
-    #     self.lb0['fg'] = label_color
-    #     self.button['text'] = 'Play again!'
-    #     self.new_game_requested = True
-    #     self.add_item_to_my_history_frame()
 
     def finish_game_on_main_window(self, game_result_code):
         game = self.game
@@ -1444,6 +1434,41 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.go_button.place(x=int(1.4 * self.initial_main_width / 2 - 200),
                              y=240 + self.string_interval_history_frame * (len(game.my_history_list) - 1))
 
+    def open_login_window(self):
+        login_window = LoginWindow(self)
+        login_window.main_win = self
+        login_window.game = self.game
+        login_window.geometry(str(login_window.width) + 'x' + str(login_window.height))
+        login_window.resizable(0, 0)
+        # self.login_window.wm_attributes('-topmost', 'yes')
+        login_window.label0 = Label(login_window, text='Please enter your login and password: ',
+                                    font='TimesNewRoman 12', fg='#e0e')
+        login_window.label0.place(x=40, y=10)
+        login_window.login_label = Label(login_window, text='Login:', font='Arial 10')
+        login_window.login_label.place(x=10, y=40)
+        login_window.login_entry = Entry(login_window, width=25, font='Arial 10', state='normal')
+        login_window.login_entry.place(x=100, y=40)
+        login_window.password_label = Label(login_window, text='Password:', font='arial 10')
+        login_window.password_label.place(x=10, y=80)
+        login_window.password_entry = Entry(login_window, width=25, font='Arial 10', show='*', state='normal')
+        login_window.password_entry.place(x=100, y=80)
+        login_window.login_button = Button(login_window, text='Login', font='arial 10',
+                                           command=login_window.authenticate_user_eh)
+        login_window.login_button.place(x=30, y=120)
+        login_window.new_user_button = Button(login_window, text='New user...', font='arial 10',
+                                              command=login_window.open_users_window)
+        login_window.new_user_button.place(x=90, y=120)
+        login_window.recovery_button = Button(login_window, text='Reset password...', font='arial 6',
+                                              command=login_window.open_restore_password_window)
+        login_window.recovery_button.place(x=188, y=126)
+        login_window.exit_button = Button(login_window, text='Exit', font='arial 10',
+                                          command=self.close)
+        login_window.exit_button.place(x=285, y=120)
+        login_window.transient(self)
+        login_window.grab_set()
+        login_window.focus_set()
+        login_window.protocol("WM_DELETE_WINDOW", self.close)
+
     def open_about_window(self):
         about_window = AboutWindow(self)
         about_window.game = self.game
@@ -1535,6 +1560,10 @@ class MainWin(Tk, AdditionalWindowMethods):
                         command=lambda: fixture_list_window.destroy())
         button.pack(side="bottom")
 
+    def show_exit_message(self):
+        text = "Are you sure you want to quit?"
+        MessageBox.show_logout_message(self,WarningMessage(text), False)
+
     def enable_mono_game(self):
         game = self.game
         self.destroy_previous_window_items()
@@ -1543,6 +1572,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.initial_main_height = self.mono_game_main_height
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
         self.resizable(0, 0)
+        self.title("Bulls and Cows Game")
         self.upper_label = Label(self, text="Think of a number with " + str(game.capacity) + " unique digits!",
                                  font='arial 12')
         self.upper_label.bind("<Double-Button-1>", self.mouse_function_hide)
@@ -1578,6 +1608,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.initial_main_height = self.dual_game_main_height
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
         self.resizable(0, 0)
+        self.title("Bulls and Cows Game")
         self.upper_label = Label(self, text="Think of a number with "
                                             + str(game.capacity) + " unique digits!\n"
                                             "And I will think of a number to guess for you!",
@@ -1668,32 +1699,21 @@ class MainWin(Tk, AdditionalWindowMethods):
         if self.lb3_:
             self.lb3_.destroy()
 
-    def show_exit_message(self):
-        exit_message_width = 270
-        exit_message_height = 100
-        text = "Are you sure you want to quit?"
-        msgbox = Toplevel(self)
-        msgbox.title("")
-        msgbox.geometry(str(exit_message_width) + 'x' + str(exit_message_height))
-        msgbox.resizable(0, 0)
-        # pic = PhotoImage(file="index.png")
-        # msgbox_pic = Label(msgbox, image=pic)
-        # msgbox_pic.pack()
-        msgbox_lb = Label(msgbox, text=text, font='arial 12', anchor='w')
-        msgbox_lb.pack(fill='none')
-        msgbox_yes_bt = Button(msgbox, text="Yes", width=8, command=lambda: self.close())
-        msgbox_yes_bt.place(x=30, y=40)
-        msgbox_no_bt = Button(msgbox, text="No", width=8, command=lambda: msgbox.destroy())
-        msgbox_no_bt.place(x=150, y=40)
-        msgbox.transient(self)
-        msgbox.grab_set()
-        msgbox.focus_set()
-
     def update_status_label(self):
         text = self.status_label["text"]
-        new_text = re.sub(r"(Attempts:\s+)(\d+)(\s+)", r"\g<1>"+str(self.game.attempts)+r"\g<3>", text)
+        new_text = re.sub(r"(Attempts:\s+)(\d+)", r"\g<1>"+str(self.game.attempts), text)
         self.status_label["text"] = new_text
 
+    def logout(self):
+        if self.game.game_started:
+            text = "Are you sure you want to finish the game and logout?"
+        else:
+            text = "Are you sure you want to logout?"
+        MessageBox.show_logout_message(self, WarningMessage(text), True)
+
+    def close(self):
+        self.destroy()
+        self.quit()
 
 class SettingWindow(Toplevel):
     width = 170
@@ -1768,7 +1788,8 @@ class AboutWindow(Toplevel):
         self.parent_window.go_button_clicked()  # ???
 
     def show_my_guessed_number(self, event):
-        self.button["text"] = self.game.my_string_for_you
+        if not self.game.dual_game_enabled:
+            self.button["text"] = self.game.my_string_for_you
 
 
 class DescriptionWindow(Toplevel):
@@ -1829,12 +1850,9 @@ class FixtureListTreeview(Toplevel):
 
 
 class MessageBox:
-    # max_messagebox_width = 470
-    # max_messagebox_height = 200
     messagebox = None
 
     def __init__(self, parent_window, msg):
-        # super().__init__()
         self.parent_window = parent_window
 
     @staticmethod
@@ -1848,19 +1866,73 @@ class MessageBox:
                 # self.parent_window.grab_set()
                 # self.parent_window.focus_set()
             messagebox.destroy()
-
-        text = str(msg.text).strip()
+        text = msg.text.strip()
         initial_text = text.split("\n")[0]  # ???
+        text, width, height = MessageBox.format_text(initial_text)###
+        messagebox = Toplevel(parent_window) if parent_window else Tk()
+        messagebox.title(msg.title)
+        messagebox.geometry(str(width) + 'x' + str(height))
+        messagebox.resizable(0, 0)
+        msgbox_pic = Label(messagebox, image=msg.label_pic)
+        msgbox_pic.pack(side="left", padx=20)
+        msgbox_lb = Label(messagebox, text=text, font='arial 10', anchor='w')
+        msgbox_lb.place(x=90, y=25)
+        msgbox_button_frame = Frame(messagebox, height=32, width=55)
+        msgbox_button_frame.pack_propagate(0)
+        msgbox_button_frame.place(x=int(width/2), y=height-40)
+        msgbox_bt = Button(msgbox_button_frame, text="OK", width=10, command=close)
+        msgbox_bt.pack()
+        messagebox.protocol('WM_DELETE_WINDOW', close)
+        if parent_window:
+            messagebox.transient(parent_window)
+            messagebox.grab_set()
+            messagebox.focus_set()
+        else:
+            messagebox.mainloop()
+
+    @staticmethod
+    def show_logout_message(parent_window, msg, is_logout):
+        def yes():
+            if isinstance(parent_window, MainWin):
+                parent_window.close()
+            else:
+                if isinstance(parent_window, UsersWindow):
+                    parent_window.proceed_deleting(parent_window.login_for_deleting)
+                    parent_window.main_win.close()
+            if is_logout:
+                run()
+        # exit_message_width = 270
+        # exit_message_height = 100
+        text, width, height = MessageBox.format_text(msg.text.strip())
+        msgbox = Toplevel(parent_window)
+        msgbox.title("")
+        msgbox.geometry(str(width) + 'x' + str(height))
+        msgbox.resizable(0, 0)
+        msgbox_pic = Label(msgbox, image=msg.label_pic)
+        msgbox_pic.pack(side="left", padx=20)
+        msgbox_lb = Label(msgbox, text=text, font='arial 12', anchor='w')
+        msgbox_lb.place(x=80, y=20)
+        msgbox_yes_bt = Button(msgbox, text="Yes", width=8, command=yes)
+        msgbox_yes_bt.place(x=int(width/2)-70, y=height-50) #continue from this
+        msgbox_no_bt = Button(msgbox, text="No", width=8, command=msgbox.destroy)
+        msgbox_no_bt.place(x=int(width/2)+40, y=height-50)
+        msgbox.transient(parent_window)
+        msgbox.grab_set()
+        msgbox.focus_set()
+
+    @staticmethod
+    def format_text(text):
         r_list = []
         longest_length = 0
-        if len(initial_text) <= 40:
-            total_text = initial_text
+        maximum_length = 70
+        if len(text) <= maximum_length:
+            total_text = text
             longest_length = len(total_text)
         else:
-            initial_text_list = initial_text.split(" ")
+            initial_text_list = text.split(" ")
             result_str = ''
             for c in initial_text_list:
-                if len(result_str + " " + c) < 40:
+                if len(result_str + " " + c) < maximum_length:
                     result_str += " " + c
                 else:
                     # result_str += " " + c
@@ -1874,27 +1946,10 @@ class MessageBox:
             number_of_rows = 1
         else:
             number_of_rows = len(r_list)
-        max_messagebox_width = longest_length * 10 + 30
-        max_messagebox_height = number_of_rows * 20 + 70
-        messagebox = Toplevel(parent_window) if parent_window else Tk()
-        messagebox.title(msg.title)
-        messagebox.geometry(str(max_messagebox_width) + 'x' + str(max_messagebox_height))
-        messagebox.resizable(0, 0)
-        # pic = PhotoImage(file="index.png")
-        # pic = PhotoImage(file="info-icon.gif")
-        msgbox_pic = Label(messagebox, image=msg.label_pic)
-        msgbox_pic.pack(side="left", padx=30)
-        msgbox_lb = Label(messagebox, text=total_text, font='arial 10', anchor='w')
-        msgbox_lb.place(x=100, y=20)
-        msgbox_bt = Button(messagebox, text="OK", width=12, command=close)
-        msgbox_bt.place(x=int(max_messagebox_width/2-40), y=max_messagebox_height-40)
-        messagebox.protocol('WM_DELETE_WINDOW', close)
-        if parent_window:
-            messagebox.transient(parent_window)
-            messagebox.grab_set()
-            messagebox.focus_set()
-        else:
-            messagebox.mainloop()
+        #width = longest_length * 10 + 50 - (longest_length//35)*55
+        width = longest_length * (11 - longest_length//20) + 50
+        height = number_of_rows * 20 + 95 - (number_of_rows//10)*15
+        return total_text, width, height
 
 
 class ExitMessage:
@@ -2026,32 +2081,16 @@ def run():
     game = Game()
     main_win = MainWin()
     main_win.game = game
-    main_win.title("Bulls and Cows Game")
     if game.dual_game_enabled:
         main_win.enable_dual_game()
     else:
         main_win.enable_mono_game()
-    main_win.menubar = Menu(main_win)
-    main_win.filemenu = Menu(main_win.menubar, tearoff=0)
-    main_win.filemenu.add_command(label="New", command=main_win.new_game_clicked)
-    main_win.filemenu.add_command(label="Settings", command=main_win.open_setting_window)
-    main_win.filemenu.add_command(label="Users", command=main_win.open_users_window)
-    main_win.filemenu.add_command(label="Fixture List", command=main_win.open_fixture_list_window)
-    main_win.filemenu.add_separator()
-    main_win.filemenu.add_command(label="Logout", command=main_win.donothing)
-    main_win.filemenu.add_command(label="Exit", command=main_win.show_exit_message)
-    main_win.menubar.add_cascade(label="File", menu=main_win.filemenu)
-    main_win.helpmenu = Menu(main_win.menubar, tearoff=0)
-    main_win.helpmenu.add_command(label="Description", command=main_win.open_description_window)
-    main_win.helpmenu.add_command(label="About...", command=main_win.open_about_window)
-    main_win.menubar.add_cascade(label="Help", menu=main_win.helpmenu)
-    main_win.config(menu=main_win.menubar)
-    main_win.pic = PhotoImage(file="index.png")
-    main_win.protocol('WM_DELETE_WINDOW', main_win.show_exit_message)
-    # main_win.iconbitmap("bnc.ico")
+    main_win.show_main_window_menu()
     main_win.open_login_window()
     main_win.mainloop()
+    print("the end")
 
 
 if __name__ == '__main__':
     run()
+    print("the end2")
