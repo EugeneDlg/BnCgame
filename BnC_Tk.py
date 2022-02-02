@@ -136,7 +136,8 @@ class Game:
         self.capacity = capacity
         self.my_history_list = list()
         self.your_history_list = list()
-        self.previous_all_set = set()
+        self.total_set = set()
+        self.current_set = set()
         self.new_game_requested = False
         self.loggedin_user = None
         self.dual_game_enabled = True
@@ -228,10 +229,19 @@ class Game:
         if correct_pincode != entered_pincode:
             raise BnCException("Incorrect pincode")
 
+    def get_new_guess_proposal(self):
+        new_guess_proposal = ''
+        while len(new_guess_proposal) < self.capacity:
+            c = str(random.randint(0, 9))
+            if (not (c in self.guess_proposal)) and (not (c in new_guess_proposal)):
+                new_guess_proposal += c
+        self.guess_proposal = new_guess_proposal
+
     @staticmethod
-    def populate(interim_str, v_list, attempt_set):
+    def populate(interim_str, v_list):
+        guess_set = set()
         if interim_str.count('V') == 0:
-            attempt_set.add(''.join(interim_str))
+            guess_set.add(''.join(interim_str))
         else:
             for y in v_list:
                 i = 0
@@ -242,52 +252,108 @@ class Game:
                         i += 1
                     else:
                         a += z
-                attempt_set.add(a[:])
-        return attempt_set
+                guess_set.add(a[:])
+        return guess_set
 
-    def get_new_proposed_str(self):
-        new_proposed_str = ''
-        while len(new_proposed_str) < self.capacity:
-            c = str(random.randint(0, 9))
-            if (not (c in self.proposed_str)) and (not (c in new_proposed_str)):
-                new_proposed_str += c
-        self.proposed_str = new_proposed_str
-
-    def get_template(self, ini0, ini1, iter0, iter1, ext_cycle_end, interim_str, v_list, attempt_set):
+    def get_template(self, ini0, ini1, iter0, iter1, ext_cycle_end, interim_str, v_list):
         for i0 in range(ini0, ext_cycle_end):
-            if iter0 < self.rightplace_resp and iter1 == 0:
+            if iter0 < self.my_bulls and iter1 == 0:
                 if interim_str[i0] != 'V':
                     continue
                 else:
-                    interim_str[i0] = self.proposed_str[i0]
-                if iter0 < self.rightplace_resp - 1:
+                    interim_str[i0] = self.guess_proposal[i0]
+                if iter0 < self.my_bulls - 1:
                     iter0 += 1
-                    self.get_template(i0 + 1, 0, iter0, iter1, ext_cycle_end, interim_str, v_list, attempt_set)
+                    self.get_template(i0 + 1, 0, iter0, iter1, ext_cycle_end, interim_str, v_list)
                     iter0 -= 1
                 else:
-                    if self.rightplace_resp == self.totqty_resp:
-                        Game.populate(interim_str, v_list, attempt_set)
-            if (self.rightplace_resp - 1 <= iter0 < self.totqty_resp - 1) or self.rightplace_resp == 0:
-                for i1 in range(ini1, len(self.proposed_str)):
-                    if self.proposed_str[i1] in interim_str: continue
-                    for i2, c in enumerate(self.proposed_str):
+                    if self.my_bulls == self.my_cows:
+                        self.current_set = self.current_set | Game.populate(interim_str, v_list)
+            if (self.my_bulls - 1 <= iter0 < self.my_cows - 1) or self.my_bulls == 0:
+                for i1 in range(ini1, len(self.guess_proposal)):
+                    if self.guess_proposal[i1] in interim_str: continue
+                    for i2, c in enumerate(self.guess_proposal):
                         if i1 == i2:
                             continue
                         if interim_str[i2] != 'V':
                             continue
                         else:
-                            interim_str[i2] = self.proposed_str[i1]
-                        if iter1 < self.totqty_resp - self.rightplace_resp - 1:
+                            interim_str[i2] = self.guess_proposal[i1]
+                        if iter1 < self.my_cows - self.my_bulls - 1:
                             iter1 += 1
-                            self.get_template(0, i1 + 1, iter0, iter1, 1, interim_str, v_list, attempt_set)
+                            self.get_template(0, i1 + 1, iter0, iter1, 1, interim_str, v_list)
                             iter1 -= 1
                             interim_str[i2] = 'V'
                         else:
-                            interim_str[i2] = self.proposed_str[i1]
-                            Game.populate(interim_str, v_list, attempt_set)
+                            interim_str[i2] = self.guess_proposal[i1]
+                            self.current_set = self.current_set | Game.populate(interim_str, v_list)
                             interim_str[i2] = 'V'
             if iter1 == 0:
                 interim_str[i0] = 'V'
+
+    def get_v_list(self):
+        v_list = []
+        capacity = self.capacity
+        my_cows = self.my_cows
+        init_rest_str = self.available_digits_str
+        for a in self.guess_proposal:
+            init_rest_str = init_rest_str.replace(a, '')
+        if capacity - my_cows > 0:
+            for l in permutations(init_rest_str, capacity - my_cows):
+                v_list.append(''.join(map(str, l)))
+        return v_list
+
+    def my_guess(self, my_cows_raw, my_bulls_raw):
+        capacity = self.capacity
+        if not self.your_string_for_automation_mono_game:
+            self.my_cows = my_cows = int(my_cows_raw)
+            self.my_bulls = my_bulls = int(my_bulls_raw)
+        else:
+            my_cows = self.my_cows
+            my_bulls = self.my_bulls
+        self.my_history_list.append((self.guess_proposal, my_cows, my_bulls))
+        if my_cows == capacity and my_bulls == capacity:
+            # raise FinishedOKException
+            return True
+        if my_cows == 0 and my_bulls == 0:
+            for a in self.guess_proposal:
+                self.available_digits_str = self.available_digits_str.replace(a, '')
+            if len(self.total_set) > 0:
+                for c in list(self.total_set):
+                    for cc in self.guess_proposal:
+                        if cc in c:
+                            self.total_set.remove(c)
+                            break
+                if len(self.total_set) == 0:
+                    raise FinishedNotOKException
+                r = random.randint(0, len(self.total_set) - 1)
+                for i, c in enumerate(self.total_set):
+                    if i == r: break
+                self.guess_proposal = c
+            else:
+                self.get_new_guess_proposal()
+            self.attempts += 1
+            return False
+        interim_str = ["V" for _ in range(self.capacity)]  # to_do
+        v_list = self.get_v_list()
+        if my_bulls > 0:
+            self.get_template(0, 0, 0, 0, capacity, interim_str, v_list)
+        else:
+            self.get_template(0, 0, 0, 0, 1, interim_str, v_list)
+        if len(self.total_set) > 0:
+            self.total_set = self.total_set & self.current_set
+        else:
+            self.total_set = self.current_set
+        if len(self.total_set) == 0:
+            raise FinishedNotOKException
+        r = random.randint(0, len(self.total_set) - 1)
+        for i, c in enumerate(self.total_set):
+            if i == r:
+                break
+        self.guess_proposal = c
+        self.attempts += 1
+        self.current_set.clear()
+        return False
 
     @staticmethod
     def calc_bulls_and_cows(true_number, guess_number):
@@ -313,74 +379,6 @@ class Game:
             # return ResponseMsg("Erroneous input combination! Try again!", "error")
             raise BnCException("Erroneous input combination! Try again!")
 
-    def my_guess(self, totqty_resp_raw, rightplace_resp_raw):
-        capacity = self.capacity
-        attempt_set = set()
-
-        if not self.your_string_for_automation_mono_game:
-            # if not ((self.text1.get()).isdigit() and self.text2.get().isdigit()):
-            #     return
-            # self.totqty_resp = int(self.text1.get())
-            # self.text1.delete(0, 'end')
-            # self.rightplace_resp = int(self.text2.get())
-            # self.text2.delete(0, 'end')
-
-            self.totqty_resp = totqty_resp = int(totqty_resp_raw)
-            self.rightplace_resp = rightplace_resp = int(rightplace_resp_raw)
-        else:
-            totqty_resp = self.totqty_resp
-            rightplace_resp = self.rightplace_resp
-        self.my_history_list.append((self.proposed_str, totqty_resp, rightplace_resp))
-        if totqty_resp == capacity and rightplace_resp == capacity:
-            # raise FinishedOKException
-            return True
-        if totqty_resp == 0 and rightplace_resp == 0:
-            for a in self.proposed_str:
-                self.available_digits_str = self.available_digits_str.replace(a, '')
-            if len(self.previous_all_set) > 0:
-                for c in list(self.previous_all_set):
-                    for cc in self.proposed_str:
-                        if cc in c:
-                            self.previous_all_set.remove(c)
-                            break
-                if len(self.previous_all_set) == 0:
-                    raise FinishedNotOKException
-                    # return ResponseMsg("", "finished erroneously")
-                r = random.randint(0, len(self.previous_all_set) - 1)
-                for i, c in enumerate(self.previous_all_set):
-                    if i == r: break
-                self.proposed_str = c
-            else:
-                self.get_new_proposed_str()
-            self.attempts += 1
-            return False
-        interim_str = ["V" for a in range(self.capacity)]  # to_do
-        init_rest_str = self.available_digits_str
-        for a in self.proposed_str:
-            init_rest_str = init_rest_str.replace(a, '')
-        v_list = []
-        if capacity - totqty_resp > 0:
-            for l in permutations(init_rest_str, capacity - totqty_resp):
-                v_list.append(''.join(map(str, l)))
-        if rightplace_resp > 0:
-            self.get_template(0, 0, 0, 0, capacity, interim_str, v_list, attempt_set)
-        else:
-            self.get_template(0, 0, 0, 0, 1, interim_str, v_list, attempt_set)
-        if len(self.previous_all_set) > 0:
-            self.previous_all_set = self.previous_all_set & attempt_set
-        else:
-            self.previous_all_set = attempt_set
-        if len(self.previous_all_set) == 0:
-            raise FinishedNotOKException
-            # return ResponseMsg("", "finished erroneously")
-        r = random.randint(0, len(self.previous_all_set) - 1)
-        for i, c in enumerate(self.previous_all_set):
-            if i == r:
-                break
-        self.proposed_str = c
-        self.attempts += 1
-        return False
-
     def your_guess(self, your_guess_string):
         if self.attempts < 1:
             return False
@@ -395,11 +393,11 @@ class Game:
         self.my_string_for_you = "".join(choice(list(permutations("0123456789", self.capacity))))
 
     @staticmethod
-    def create_user_as_role(login_to_create, password_to_create, db_login, db_password):
+    def create_user_as_role(login_to_create, password_to_create):
         try:
-            session = Game.get_db_session(db_login, db_password)
+            session = Game.get_db_session()
             engine = session.bind.engine
-            sql_command = f"create user {login_to_create} with createrole " \
+            sql_command = f"create user {login_to_create} with " \
                           f"encrypted password '{password_to_create}' in role {Game.db_common_role}"
             with engine.connect() as con:
                 con.execute(sql_command)
@@ -430,6 +428,21 @@ class Game:
             raise
 
     @staticmethod
+    def validate_db_role(login):
+        try:
+            session = Game.get_db_session()
+            engine = session.bind.engine
+            sql_command = f"select * from pg_roles where rolname='{login}'"
+            with engine.connect() as con:
+                result = con.execute(sql_command)
+        except Exception:
+            raise
+        try:
+            next(result)
+        except StopIteration:
+            raise BnCException("No such user in the database.")
+
+    @staticmethod
     def create_user(*args):
         login, password, firstname, lastname, email, db_user = args
         login = login.strip()
@@ -445,6 +458,7 @@ class Game:
             password=Game.encrypt_password(password)
         )
         try:
+            Game.validate_db_role(db_user)
             session = Game.get_db_session(db_user, "")
             session.add(user)
             session.commit()
@@ -470,6 +484,7 @@ class Game:
             lastname = lastname.strip()
             email = email.strip().lower()
         try:
+            Game.validate_db_role(db_user)
             session = Game.get_db_session(db_user, "")
             if only_password:
                 session.query(BnCUsers).filter_by(login=login).update({"login": login,
@@ -493,6 +508,7 @@ class Game:
     def delete_user(login, db_user):
         login = login.strip().lower()
         try:
+            Game.validate_db_role(db_user)
             session = Game.get_db_session(db_user, "")
             # session.query(Privileges).filter_by(login=login).delete()
             session.query(BnCUsers).filter_by(login=login).delete() # cascade deleting in DB (from all referenced tables)
@@ -532,7 +548,7 @@ class Game:
                                 'delete_other': r0.delete_other}
 
     @staticmethod
-    def create_user_privileges(login):
+    def create_user_privileges(login, db_user):
         if login == ADMIN_USER:
             user_priv = {"create_other": True, "modify_self": True, "modify_other": True,
                          "delete_self": False, "delete_other": True}
@@ -548,7 +564,8 @@ class Game:
             delete_other=user_priv["delete_other"]
         )
         try:
-            session = Game.get_db_session(login, "")
+            Game.validate_db_role(db_user)
+            session = Game.get_db_session(db_user, "")
             session.add(privileges)
             session.commit()
             session.close()
@@ -560,9 +577,10 @@ class Game:
             raise
 
     @staticmethod
-    def delete_user_privileges(login):
+    def delete_user_privileges(login, db_user):
         try:
-            session = Game.get_db_session(login, "")
+            Game.validate_db_role(db_user)
+            session = Game.get_db_session(db_user, "")
             session.query(Privileges).filter_by(login=login).delete()
             session.commit()
             session.close()
@@ -583,11 +601,13 @@ class Game:
         if not Game.sessions[user]:
             if user == Game.default_db_user:
                 password = Game.base64_decode_(password)
-            db_conn_string = DB_CONN_STRING_PRE + user + ":" + password + "@" \
+            db_conn_string = DB_CONN_STRING_PRE + str(user) + ":" + str(password) + "@" \
                              + DB_SOCKET + "/" + DB_NAME
             # m = re.search(r":([^/].+)@", DB_CONN_STRING)
             # db_conn_string = DB_CONN_STRING.replace(m.group(1), Game.base64_decode_(m.group(1)))
             try:
+                if user != Game.default_db_user:
+                    Game.validate_db_role(user)
                 engine = create_engine(db_conn_string)
                 DBSession = sessionmaker(bind=engine)
                 Game.sessions[user] = DBSession()
@@ -611,8 +631,7 @@ class Game:
             login = login.strip()
             login_search = login_pattern.search(login)
             if 4 > len(login):
-                # ret_message += "Login is too short. Login must consist of at least 4 symbols. "
-                ret_message += "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaj"
+                ret_message += "Login is too short. Login must consist of at least 4 symbols. "
             elif 10 < len(login):
                 ret_message += "Login is too long. Maximum length of login is 10 symbols. "
             elif login_search:
@@ -718,7 +737,6 @@ class Game:
     def prepare_game(self):
         try:
             self.prepare_db()
-            # MessageBox.show_message(None, WarningMessage("Please create admin user"))
         except Exception as exc:
             MessageBox.show_message(None, ErrorMessage(exc))
             exit()
@@ -747,17 +765,18 @@ class Game:
             raise BnCException("You entered an invalid string trying to guess my number!")
 
     def game_initials(self):
-        self.previous_all_set.clear()
+        self.total_set.clear()
+        self.current_set.clear()
         self.my_history_list.clear()
         self.your_history_list.clear()
-        self.totqty_resp = None
-        self.rightplace_resp = None
+        self.my_cows = None
+        self.my_bulls = None
         self.your_string_for_automation_mono_game = None
         self.my_string_for_you = None
         self.your_cows = None
         self.your_bulls = None
         self.available_digits_str = '0123456789'
-        self.proposed_str = ''
+        self.guess_proposal = ''
         self.attempts = 0
         self.game_started = False
         self.start_timestamp = None
@@ -1009,18 +1028,17 @@ class UsersWindow(Toplevel):
         firstname = self.firstname_entry.get().strip()
         lastname = self.lastname_entry.get().strip()
         email = self.email_entry.get().strip()
-        db_user = game.loggedin_user if game.loggedin_user else Game.default_db_user
-        db_password = "" if game.loggedin_user else Game.base64_decode_(Game.default_db_password)
+        db_user = game.loggedin_user if game.loggedin_user else login
         if game.loggedin_user and not game.apply_privileges("create", False):
             MessageBox.show_message(self, ErrorMessage("You have no right to create a user (you are not Administrator)"))
             return
         try:
             Game.validate_user(login, password1, password2, firstname, lastname, email, op="create")
-            Game.create_user_as_role(login, password1, db_user, db_password)
+            Game.create_user_as_role(login, password1)
             if not game.loggedin_user:
                 Game.get_db_session(login, password1)
             Game.create_user(login, password1, firstname, lastname, email, db_user)
-            Game.create_user_privileges(login)
+            Game.create_user_privileges(login, db_user)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
@@ -1096,7 +1114,7 @@ class UsersWindow(Toplevel):
         game = self.game
         try:
             Game.delete_user(login, game.loggedin_user)
-            # Game.delete_user_privileges(login)
+            # Game.delete_user_privileges(login, game.loggedin_user)
             Game.delete_user_as_role(login)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
@@ -1235,7 +1253,7 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.your_cows_label["state"] = "normal"
             self.your_bulls_label["state"] = "normal"
         if game.attempts == 0:
-            game.get_new_proposed_str()
+            game.get_new_guess_proposal()
             game.think_of_number_for_you()
             game.attempts += 1
             game.start_timestamp = time()
@@ -1374,7 +1392,7 @@ class MainWin(Tk, AdditionalWindowMethods):
     def change_data_on_window_mono_game(self):
         self.my_cows_entry.delete(0, "end")
         self.my_bulls_entry.delete(0, "end")
-        self.upper_label['text'] = 'I guess your number is: ' + self.game.proposed_str
+        self.upper_label['text'] = 'I guess your number is: ' + self.game.guess_proposal
         self.upper_label['fg'] = '#000'
         self.go_button["text"] = "OK!"
         # self.attempts_label['text'] = 'Attempts: ' + str(self.game.attempts)
@@ -1401,7 +1419,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.my_cows_entry.delete(0, "end")
         self.my_bulls_entry.delete(0, "end")
         self.your_guess_entry.delete(0, "end")
-        self.my_upper_label['text'] = 'I guess your number is: ' + self.game.proposed_str
+        self.my_upper_label['text'] = 'I guess your number is: ' + self.game.guess_proposal
         self.upper_label['fg'] = '#000'
         # self.attempts_label['text'] = 'Attempts: ' + str(self.game.attempts)
         # self.status_label["text"] = f"Attempts: {str(self.game.attempts)}      Duration 00:00:{self.count}"
@@ -1592,7 +1610,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.go_button.place(x=110, y=100)
         self.my_history_frame = LabelFrame(self, text='History of attempts', labelanchor='n', font='arial 8',
                                            padx='80')
-        self.lb3_ = Label(self, text="Previous set: " + str(len(game.previous_all_set)), font='arial 5')
+        self.lb3_ = Label(self, text="Previous set: " + str(len(game.total_set)), font='arial 5')
         #  lb3_.pack(fill='none', side='bottom')
         #  lb3_.pack_forget()
         # self.attempts_label = Label(self, text="Attempts: " + str(game.attempts), font='arial 8')
@@ -1781,10 +1799,10 @@ class AboutWindow(Toplevel):
 
     def automate_answer(self):
         game = self.game
-        while not (game.totqty_resp == game.capacity and game.rightplace_resp == game.capacity):
+        while not (game.my_cows == game.capacity and game.my_bulls == game.capacity):
             self.parent_window.go_button_clicked()
-            game.totqty_resp, game.rightplace_resp = game.calc_bulls_and_cows(
-                game.your_string_for_automation_mono_game, game.proposed_str)
+            game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
+                game.your_string_for_automation_mono_game, game.guess_proposal)
         self.parent_window.go_button_clicked()  # ???
 
     def show_my_guessed_number(self, event):
@@ -1874,20 +1892,22 @@ class MessageBox:
         messagebox.geometry(str(width) + 'x' + str(height))
         messagebox.resizable(0, 0)
         msgbox_pic = Label(messagebox, image=msg.label_pic)
-        msgbox_pic.pack(side="left", padx=20)
         msgbox_lb = Label(messagebox, text=text, font='arial 10', anchor='w')
-        msgbox_lb.place(x=90, y=25)
         msgbox_button_frame = Frame(messagebox, height=32, width=55)
         msgbox_button_frame.pack_propagate(0)
-        msgbox_button_frame.place(x=int(width/2), y=height-40)
         msgbox_bt = Button(msgbox_button_frame, text="OK", width=10, command=close)
         msgbox_bt.pack()
         messagebox.protocol('WM_DELETE_WINDOW', close)
         if parent_window:
+            msgbox_pic.pack(side="left", padx=20)
+            msgbox_lb.place(x=90, y=25)
+            msgbox_button_frame.place(x=int(width / 2), y=height - 40)
             messagebox.transient(parent_window)
             messagebox.grab_set()
             messagebox.focus_set()
         else:
+            msgbox_lb.pack(side="top", pady=10)
+            msgbox_button_frame.pack(side="bottom", pady=20)
             messagebox.mainloop()
 
     @staticmethod
