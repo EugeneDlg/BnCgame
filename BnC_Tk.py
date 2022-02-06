@@ -146,6 +146,79 @@ class Game:
         self.game_initials()
 
     @staticmethod
+    def overlap_set_items(a0, a1):
+        lst = []
+        for x in zip(a0, a1):
+            if x[0].isnumeric() and x[1].isnumeric():
+                return None
+            lst.append(x[0] if x[0].isnumeric() else x[1])
+        digits = list(filter(lambda e: e.isnumeric(), lst))
+        if len(digits) != len(set(digits)):
+            return None
+        else:
+            return lst
+
+    @staticmethod
+    def overlap_sets(set0, set1, iteration):
+        # for i0, c0 in enumerate(list0):
+        #     for i1 in range(i0 + 1, len(list1)):
+        #         tmp = list(map(overlap_set_items, zip(c0, list1[i1])))
+        #         if tmp:
+        #             total.append(tuple(tmp))
+        total = set()
+        while iteration > 0:
+            total.clear()
+            for i0 in set0:
+                for i1 in set1:
+                    if i0 == i1:
+                        continue
+                    tmp = Game.overlap_set_items(i0, i1)
+                    if tmp:
+                        total.add(tuple(tmp))
+            set1 = total.copy()
+            iteration -= 1
+        return total
+
+    def get_all_variants(self):
+        cows = self.my_cows
+        bulls = self.my_bulls
+        current_guess = self.guess_proposal
+        capacity = self.capacity
+        only_bulls_set = set()
+        one_cow_set = set()
+        if cows - bulls == 0:
+            bulls_permut = set(map(tuple, map(sorted, permutations(range(len(current_guess)), cows))))
+            for i0 in bulls_permut:
+                temp = ["V" for _ in range(capacity)]
+                for i1 in i0:
+                    temp[i1] = current_guess[i1]
+                only_bulls_set.add(tuple(temp))
+            total = only_bulls_set.copy()
+
+        else:
+            for i0 in range(capacity):
+                temp = ["V" for _ in range(capacity)]
+                for i1, c1 in enumerate(current_guess):
+                    if i1 == i0:
+                        continue
+                    temp[i0] = c1
+                    one_cow_set.add(tuple(temp))
+
+            if cows - bulls == 1:
+                total = one_cow_set.copy()
+            else:
+                total = Game.overlap_sets(one_cow_set, one_cow_set, cows - bulls - 1)
+            if bulls > 0:
+                bulls_permut = set(map(tuple, map(sorted, permutations(range(len(current_guess)), bulls))))
+                for i0 in bulls_permut:
+                    temp = ["V" for _ in range(capacity)]
+                    for i1 in i0:
+                        temp[i1] = current_guess[i1]
+                    only_bulls_set.add(tuple(temp))
+                total = Game.overlap_sets(only_bulls_set, total, 1)
+        return total
+
+    @staticmethod
     def load_logged_user_info(loggedin_user):
         try:
             session = Game.get_db_session(loggedin_user, "")
@@ -255,42 +328,6 @@ class Game:
                 guess_set.add(a[:])
         return guess_set
 
-    def get_template(self, ini0, ini1, iter0, iter1, ext_cycle_end, interim_str, v_list):
-        for i0 in range(ini0, ext_cycle_end):
-            if iter0 < self.my_bulls and iter1 == 0:
-                if interim_str[i0] != 'V':
-                    continue
-                else:
-                    interim_str[i0] = self.guess_proposal[i0]
-                if iter0 < self.my_bulls - 1:
-                    iter0 += 1
-                    self.get_template(i0 + 1, 0, iter0, iter1, ext_cycle_end, interim_str, v_list)
-                    iter0 -= 1
-                else:
-                    if self.my_bulls == self.my_cows:
-                        self.current_set = self.current_set | Game.populate(interim_str, v_list)
-            if (self.my_bulls - 1 <= iter0 < self.my_cows - 1) or self.my_bulls == 0:
-                for i1 in range(ini1, len(self.guess_proposal)):
-                    if self.guess_proposal[i1] in interim_str: continue
-                    for i2, c in enumerate(self.guess_proposal):
-                        if i1 == i2:
-                            continue
-                        if interim_str[i2] != 'V':
-                            continue
-                        else:
-                            interim_str[i2] = self.guess_proposal[i1]
-                        if iter1 < self.my_cows - self.my_bulls - 1:
-                            iter1 += 1
-                            self.get_template(0, i1 + 1, iter0, iter1, 1, interim_str, v_list)
-                            iter1 -= 1
-                            interim_str[i2] = 'V'
-                        else:
-                            interim_str[i2] = self.guess_proposal[i1]
-                            self.current_set = self.current_set | Game.populate(interim_str, v_list)
-                            interim_str[i2] = 'V'
-            if iter1 == 0:
-                interim_str[i0] = 'V'
-
     def get_v_list(self):
         v_list = []
         capacity = self.capacity
@@ -351,12 +388,11 @@ class Game:
                 self.get_new_guess_proposal()
             self.attempts += 1
             return False
-        interim_str = ["V" for _ in range(self.capacity)]  # to_do
         v_list = self.get_v_list()
-        if my_bulls > 0:
-            self.get_template(0, 0, 0, 0, capacity, interim_str, v_list)
-        else:
-            self.get_template(0, 0, 0, 0, 1, interim_str, v_list)
+        self.items_set = self.get_all_variants()
+        for x in self.items_set:
+            s = self.populate(x, v_list)
+            self.current_set = self.current_set | s
         if len(self.total_set) > 0:
             self.total_set = self.total_set & self.current_set
         else:
