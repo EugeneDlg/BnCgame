@@ -142,7 +142,7 @@ class Game:
         self.loggedin_user = None
         self.dual_game_enabled = True
         self.user_privileges = None
-        self.prepare_game()
+        # self.prepare_game()
         self.game_initials()
 
     @staticmethod
@@ -303,7 +303,24 @@ class Game:
                 v_list.append(''.join(map(str, l)))
         return v_list
 
-    def my_guess(self, my_cows_raw, my_bulls_raw):
+    def my_guess(self, my_cows_raw: int, my_bulls_raw: int):
+        """
+        The method figures out my next guess proposal based on number
+        of cows and bulls that were given by you (user) for my current guess proposal.
+        :param my_cows_raw: Number of cows entered by you
+                    (an overall number of digits that I (script)
+                    managed to guess from the current guess proposal)
+        :param my_bulls_raw: Number of bulls entered by you
+                    (a number of digits of the correct positions that I (script)
+                    managed to guess from the current guess proposal)
+        :return: - True if the original number is guessed my me (by the script), i.e.
+                        my_cows == my_bulls == capacity. So I am a winner.
+                 - False if everything is OK and so we can proceed the game to the next iteration.
+                        I calculate the next guess proposal based on my_cows and my_bulls.
+                 - FinishedNotOKException raised if you have misled me during previous game iteration
+                 by providing of wrong cows and/or bulls. In this case game
+                 has become inconsistent, so I cannot guess your number and so I have to finish the game.
+        """
         capacity = self.capacity
         if not self.your_string_for_automation_mono_game:
             self.my_cows = my_cows = int(my_cows_raw)
@@ -1514,7 +1531,9 @@ class MainWin(Tk, AdditionalWindowMethods):
              "reports to the second gamer two values: "\
              "the overall amount of the coincident digits (cows) "\
              "and the amount of the coincident digits "\
-             "which have the right position(bulls)."
+             "which have the right position(bulls)." \
+             "For further information, please read:" \
+             "{http://www.wikipedia.org/}"
         MessageBox.show_message(self, InfoMessage(text))
 
     def open_setting_window(self):
@@ -1887,6 +1906,10 @@ class MessageBox:
         text = msg.text.strip()
         initial_text = text.split("\n")[0]  # ???
         text, width, height = MessageBox.format_text(initial_text)###
+        # match = re.search(r"{(.+)}", text)
+        # if match:
+        #     link = match.group(1)
+        #     text = re.sub("\n{"+link+"}", "", text)
         messagebox = Toplevel(parent_window) if parent_window else Tk()
         messagebox.title(msg.title)
         messagebox.geometry(str(width) + 'x' + str(height))
@@ -1921,8 +1944,6 @@ class MessageBox:
                     parent_window.main_win.close()
             if is_logout:
                 run()
-        # exit_message_width = 270
-        # exit_message_height = 100
         text, width, height = MessageBox.format_text(msg.text.strip())
         msgbox = Toplevel(parent_window)
         msgbox.title("")
@@ -2106,7 +2127,7 @@ def run():
     else:
         main_win.enable_mono_game()
     main_win.show_main_window_menu()
-    main_win.open_login_window()
+    # main_win.open_login_window()
     main_win.mainloop()
     print("the end")
 

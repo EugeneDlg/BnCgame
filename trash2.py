@@ -87,6 +87,8 @@ def send_pincode():
 # z_t = filter(func,z)
 # [print(i) for i in z_t]
 
-s = {'c', 'b'}
-ss = list(s)
-print(ss)
+s = [5,7,8]
+d = s
+
+d.clear()
+print(s)
