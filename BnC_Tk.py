@@ -186,6 +186,7 @@ class Game:
         capacity = self.capacity
         only_bulls_set = set()
         one_cow_set = set()
+        total = set()
         if cows - bulls == 0:
             bulls_permut = set(map(tuple, map(sorted, permutations(range(len(current_guess)), cows))))
             for i0 in bulls_permut:
@@ -396,7 +397,7 @@ class Game:
         if len(self.total_set) > 0:
             self.total_set = self.total_set & self.current_set
         else:
-            self.total_set = self.current_set
+            self.total_set = self.current_set.copy()
         if len(self.total_set) == 0:
             raise FinishedNotOKException
         r = random.randint(0, len(self.total_set) - 1)
@@ -1420,6 +1421,7 @@ class MainWin(Tk, AdditionalWindowMethods):
                                        "Attempts: " + str(self.game.attempts)
             self.upper_label['fg'] = '#00a'
         self.go_button['text'] = 'Play again!'
+        self.game.new_game_requested = True
         # self.lb3_['text'] = "Previous set: " + str(len(self.game.previous_all_set))
         self.my_cows_entry.delete(0, "end")
         self.my_bulls_entry.delete(0, "end")
@@ -1434,13 +1436,12 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.your_guess_entry["state"] = "disabled"
             self.your_cows_label["state"] = "disabled"
             self.your_bulls_label["state"] = "disabled"
-        self.game.new_game_requested = True
-        if self.game.dual_game_enabled:
             self.add_item_to_my_and_your_history_frame()
+            if game_result_code > 0:
+                game.write_fl_to_db(game_result_code)
         else:
             self.add_item_to_my_history_frame()
-        if game_result_code > 0:
-            game.write_fl_to_db(game_result_code)
+
 
     def change_data_on_window_mono_game(self):
         self.my_cows_entry.delete(0, "end")
@@ -1753,6 +1754,10 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.my_outer_frame.destroy()
         if self.your_outer_frame:
             self.your_outer_frame.destroy()
+        if self.my_history_frame:
+            self.my_history_frame.destroy()
+        if self.your_history_frame:
+            self.your_history_frame.destroy()
         if self.upper_label:
             self.upper_label.destroy()
         if self.go_button:
