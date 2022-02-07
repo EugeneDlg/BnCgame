@@ -79,16 +79,4 @@ def send_pincode():
 # send_pincode()
 
 # from functools import reduce
-# def func(a0):
-#     # return list(zip(a0,a1))
-#     total = reduce(lambda a, b: int(a)+int(b), a0)
-#     return bool(int(total)%2)
-# z = [['1','2','3'],['4','5','6'],['7','8','9']]
-# z_t = filter(func,z)
-# [print(i) for i in z_t]
 
-s = [5,7,8]
-d = s
-
-d.clear()
-print(s)

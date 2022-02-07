@@ -179,7 +179,7 @@ class Game:
             iteration -= 1
         return total
 
-    def get_all_variants(self):
+    def get_all_templates(self):
         cows = self.my_cows
         bulls = self.my_bulls
         current_guess = self.guess_proposal
@@ -312,12 +312,12 @@ class Game:
         self.guess_proposal = new_guess_proposal
 
     @staticmethod
-    def populate(interim_str, v_list):
+    def populate(interim_str, items_for_templates):
         guess_set = set()
         if interim_str.count('V') == 0:
             guess_set.add(''.join(interim_str))
         else:
-            for y in v_list:
+            for y in items_for_templates:
                 i = 0
                 a = ''
                 for z in interim_str:
@@ -329,8 +329,8 @@ class Game:
                 guess_set.add(a[:])
         return guess_set
 
-    def get_v_list(self):
-        v_list = []
+    def get_items_for_templates(self):
+        items_for_templates = []
         capacity = self.capacity
         my_cows = self.my_cows
         init_rest_str = self.available_digits_str
@@ -338,8 +338,8 @@ class Game:
             init_rest_str = init_rest_str.replace(a, '')
         if capacity - my_cows > 0:
             for l in permutations(init_rest_str, capacity - my_cows):
-                v_list.append(''.join(map(str, l)))
-        return v_list
+                items_for_templates.append(''.join(map(str, l)))
+        return items_for_templates
 
     def my_guess(self, my_cows_raw: int, my_bulls_raw: int):
         """
@@ -389,10 +389,10 @@ class Game:
                 self.get_new_guess_proposal()
             self.attempts += 1
             return False
-        v_list = self.get_v_list()
-        self.items_set = self.get_all_variants()
-        for x in self.items_set:
-            s = self.populate(x, v_list)
+        items_for_templates = self.get_items_for_templates()
+        items_set = self.get_all_templates()
+        for x in items_set:
+            s = self.populate(x, items_for_templates)
             self.current_set = self.current_set | s
         if len(self.total_set) > 0:
             self.total_set = self.total_set & self.current_set
