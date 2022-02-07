@@ -13,14 +13,7 @@ one_cow_list = set()
 only_bulls_set = set()
 
 
-# t = [('v','1','v','v'),('v','v','2','v'),('v','3','v','v'),('2','v','v','v')]
-# t0 = ('1','v','v','v')
-# t1 = ('v','2','v','v')
-#
-# # print(next(filter(lambda e: e.isnumeric(),t1)) in t0)
-#
 
-#
 # # print((list(map(overlap, zip(t0,t1)))))
 # list1 = one_cow_list.copy()
 # list2 = one_cow_list.copy()
@@ -32,16 +25,6 @@ only_bulls_set = set()
 #         if not is_found and all(tmp):
 #             total.append(tmp[:])
 #
-# [print(e) for e in total]
-#
-# if not cows:
-#     exit()
-# if bulls > 0:
-
-
-
-
-
 
 
 # total_s = sorted(total)
