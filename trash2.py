@@ -2,14 +2,13 @@ from itertools import permutations as permut
 import secrets
 import re
 import base64
+import time
+
 # print(base64.b64encode("bncdflt1!".encode("ascii")).decode("ascii"))
 # print(base64.b64encode("tP$sa7Ml".encode("ascii")).decode("ascii"))
 print(base64.b64encode("CsK01EWBy1UkqQmd1xq2".encode("ascii")).decode("ascii"))
 
-a = [6,7,8,9]
-b = [1, "a", "a", "a"]
-lst0 = list(permut(b,4))
-set0 = set(lst0)
+
 # cows = 1
 # bulls = 0
 # perm0 = list(permut("1234", cows))
@@ -86,9 +85,18 @@ def send_pincode():
 # z = [['1','2','3'],['4','5','6'],['7','8','9']]
 # z_t = filter(func,z)
 # [print(i) for i in z_t]
+# def f(a, b):
+#     list0 = a[:]
+#     list1 = b[:]
+#     while list0.count('V'):
+#         list0[list0.index('V')] = list1.pop()
+#     return list0
 
-s = [5,7,8]
-d = s
+# l = [['3','V','1','V'],['4','V','5','V']]
+# L = [['9','8'],['8','9']]
+# LL = [f(a,b) for a in l for b in L]
+# print(LL)
 
-d.clear()
-print(s)
+t = (('3',),('4',),('6',))
+print("".join(map(lambda e: str(e[0]),t)))
+
