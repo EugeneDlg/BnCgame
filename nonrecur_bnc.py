@@ -3,13 +3,12 @@ from BnC_Tk import Game
 import time
 
 game = Game()
-current_guess = game.guess_proposal = "12345"
+current_guess = game.guess_proposal = "1234567"
 capacity = game.capacity = len(current_guess)
 cows = game.my_cows = 5
 bulls = game.my_bulls = 0
 guess_list = []
 guess_list.extend(current_guess)
-tpl = (guess_list)
 one_cow_list = set()
 only_bulls_set = set()
 
@@ -31,7 +30,7 @@ def overlap_set_items(a0, a1):
     if len(digits) != len(set(digits)):
         return None
     else:
-        return lst
+        return tuple(lst)
 
 
 def overlap_sets(set0, set1, iteration):
@@ -58,18 +57,15 @@ def overlap_sets2(set0, set1, iteration):
     total = set()
     while iteration > 0:
         total.clear()
-        for i0, c0 in enumerate(set0):
-            for i1 in range(i0 + 1, len(set1)):
-                if i0 == i1:
-                    continue
-                tmp = overlap_set_items(c0, set1[i1])
-                if tmp:
-                    total.add(tuple(tmp))
+        sss = (overlap_set_items(a, b) for a in set0 for b in set1)
+        total = set(sss)
+        total.discard(None)
+        # total = set(filter(lambda s: s is not None, sss))
         set1 = total.copy()
         iteration -= 1
     return total
 
-def get_all_variants():
+def get_all_templates():
     if cows - bulls == 0:
         bulls_permut = set(map(tuple, map(sorted, permutations(range(len(current_guess)), cows))))
         for i0 in bulls_permut:
@@ -110,17 +106,17 @@ def get_all_variants():
 v_list = game.get_v_list()
 
 start = time.perf_counter()
-total = get_all_variants()
+total = get_all_templates()
 stop = time.perf_counter()
 print(stop-start)
-start = time.perf_counter()
-for x in total:
-    s = game.populate(x, v_list)
-    game.current_set = game.current_set | s
-stop = time.perf_counter()
-print(stop-start)
-total_list_non = sorted(game.current_set)
-print(len(total_list_non))
+# start = time.perf_counter()
+# for x in total:
+#     s = game.populate(x, v_list)
+#     game.current_set = game.current_set | s
+# stop = time.perf_counter()
+# print(stop-start)
+# total_list_non = sorted(game.current_set)
+# print(len(total_list_non))
 print("=============")
 if cows-bulls==capacity:
     s = ["".join(x) for x in total]
@@ -131,7 +127,7 @@ else:
     print(stop - start)
 print(len(s))
 s_1 = sorted(s)
-print(s_1 == total_list_non)
+# print(s_1 == total_list_non)
 
 # interim_str = ["V" for _ in range(capacity)]
 # game.current_set = set()

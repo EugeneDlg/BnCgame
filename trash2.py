@@ -97,6 +97,8 @@ def send_pincode():
 # LL = [f(a,b) for a in l for b in L]
 # print(LL)
 
-t = (('3',),('4',),('6',))
-print("".join(map(lambda e: str(e[0]),t)))
-
+d = [(6,7),(7,8),9]
+d = (x for x in d)
+s = set(d)
+s.discard(4)
+print(s)
