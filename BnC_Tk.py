@@ -156,25 +156,17 @@ class Game:
         if len(digits) != len(set(digits)):
             return None
         else:
-            return lst
+            return tuple(lst)
 
     @staticmethod
     def overlap_sets(set0, set1, iteration):
-        # for i0, c0 in enumerate(list0):
-        #     for i1 in range(i0 + 1, len(list1)):
-        #         tmp = list(map(overlap_set_items, zip(c0, list1[i1])))
-        #         if tmp:
-        #             total.append(tuple(tmp))
         total = set()
         while iteration > 0:
             total.clear()
-            for i0 in set0:
-                for i1 in set1:
-                    if i0 == i1:
-                        continue
-                    tmp = Game.overlap_set_items(i0, i1)
-                    if tmp:
-                        total.add(tuple(tmp))
+            sss = (Game.overlap_set_items(a, b) for a in set0 for b in set1)
+            total = set(sss)
+            total.discard(None)
+            # total = set(filter(lambda s: s is not None, sss))
             set1 = total.copy()
             iteration -= 1
         return total
@@ -204,7 +196,6 @@ class Game:
                         continue
                     temp[i0] = c1
                     one_cow_set.add(tuple(temp))
-
             if cows - bulls == 1:
                 total = one_cow_set.copy()
             else:
@@ -359,6 +350,15 @@ class Game:
                  by providing of wrong cows and/or bulls. In this case game
                  has become inconsistent, so I cannot guess your number and so I have to finish the game.
         """
+
+        def f(a, b):
+            list0 = list(a)
+            list1 = []
+            list1.extend(b)
+            while list0.count('V'):
+                list0[list0.index('V')] = list1.pop()
+            return "".join(list0)
+
         capacity = self.capacity
         if not self.your_string_for_automation_mono_game:
             self.my_cows = my_cows = int(my_cows_raw)
@@ -391,9 +391,11 @@ class Game:
             return False
         items_for_templates = self.get_items_for_templates()
         items_set = self.get_all_templates()
-        for x in items_set:
-            s = self.populate(x, items_for_templates)
-            self.current_set = self.current_set | s
+        if my_cows - my_bulls == capacity:
+            lst = ["".join(x) for x in items_set]
+        else:
+            lst = [f(a, b) for a in items_set for b in items_for_templates]
+        self.current_set = set(lst)
         if len(self.total_set) > 0:
             self.total_set = self.total_set & self.current_set
         else:
