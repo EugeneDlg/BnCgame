@@ -7,8 +7,10 @@ from itertools import permutations
 from secrets import choice
 from datetime import datetime
 from time import time
-from tkinter import *
-from tkinter import Canvas, Frame, Scrollbar, ttk
+from tkinter import Label, Button, Entry, Canvas, Frame, Scrollbar, PhotoImage, LabelFrame, Menu, Checkbutton
+from tkinter import SUNKEN, BOTTOM, E, W, N, S, X, Y
+from tkinter import Toplevel, ttk, Tk
+from tkinter import StringVar, BooleanVar
 import smtplib
 import ssl
 from email.mime.text import MIMEText
@@ -36,9 +38,7 @@ PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
 ADMIN_USER = "admin"
 DEFAULT_DB_USER = "bnc_default"
-# DEFAULT_DB_USER = "postgres"
 DEFAULT_DB_PASSWORD = "Ym5jZGZsdDEh"
-# DEFAULT_DB_PASSWORD = "dFAkc2E3TWw="
 DB_COMMON_ROLE = "bnc_user"
 DB_ADMIN_ROLE = "bnc_admin"
 SSL_PORT = 465
@@ -381,19 +381,16 @@ class Game:
                             break
                 if len(self.total_set) == 0:
                     raise FinishedNotOKException
-                r = random.randint(0, len(self.total_set) - 1)
-                for i, c in enumerate(self.total_set):
-                    if i == r: break
-                self.guess_proposal = c
+                self.guess_proposal = choice(tuple(self.total_set))
             else:
                 self.get_new_guess_proposal()
             self.attempts += 1
             return False
-        items_for_templates = self.get_items_for_templates()
         items_set = self.get_all_templates()
-        if my_cows - my_bulls == capacity:
+        if my_cows == capacity:
             lst = ["".join(x) for x in items_set]
         else:
+            items_for_templates = self.get_items_for_templates()
             lst = [f(a, b) for a in items_set for b in items_for_templates]
         self.current_set = set(lst)
         if len(self.total_set) > 0:
@@ -402,11 +399,7 @@ class Game:
             self.total_set = self.current_set.copy()
         if len(self.total_set) == 0:
             raise FinishedNotOKException
-        r = random.randint(0, len(self.total_set) - 1)
-        for i, c in enumerate(self.total_set):
-            if i == r:
-                break
-        self.guess_proposal = c
+        self.guess_proposal = choice(tuple(self.total_set))
         self.attempts += 1
         self.current_set.clear()
         return False
@@ -819,6 +812,7 @@ class Game:
         if not input_string.isdigit() or len(input_string) != capacity or len(set(list(input_string))) != len(
                 list(input_string)):
             raise BnCException("You entered an invalid string trying to guess my number!")
+        return True
 
     def game_initials(self):
         self.total_set.clear()
@@ -1570,9 +1564,7 @@ class MainWin(Tk, AdditionalWindowMethods):
              "reports to the second gamer two values: "\
              "the overall amount of the coincident digits (cows) "\
              "and the amount of the coincident digits "\
-             "which have the right position(bulls)." \
-             "For further information, please read:" \
-             "{http://www.wikipedia.org/}"
+             "which have the right position(bulls)."
         MessageBox.show_message(self, InfoMessage(text))
 
     def open_setting_window(self):
@@ -1638,7 +1630,7 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def show_exit_message(self):
         text = "Are you sure you want to quit?"
-        MessageBox.show_logout_message(self,WarningMessage(text), False)
+        MessageBox.show_logout_message(self, WarningMessage(text), False)
 
     def enable_mono_game(self):
         game = self.game
@@ -1847,7 +1839,7 @@ class AboutWindow(Toplevel):
             self.your_string_entry = Entry(self, width=game.capacity + 2, font='Arial 8', state='normal')
             self.your_string_entry.place(x=112, y=81)
             return
-        your_string = strip(self.your_string_entry.get())
+        your_string = self.your_string_entry.get().strip()
         if not Game.validate_your_string(game.capacity, your_string):
             game.your_string_for_automation_mono_game = None
             return
