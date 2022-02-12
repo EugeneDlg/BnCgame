@@ -171,7 +171,7 @@ class Game:
             iteration -= 1
         return total
 
-    def get_all_templates(self):
+    def get_templates(self):
         cows = self.my_cows
         bulls = self.my_bulls
         current_guess = self.guess_proposal
@@ -386,12 +386,12 @@ class Game:
                 self.get_new_guess_proposal()
             self.attempts += 1
             return False
-        items_set = self.get_all_templates()
+        templates_set = self.get_templates()
         if my_cows == capacity:
-            lst = ["".join(x) for x in items_set]
+            lst = ["".join(x) for x in templates_set]
         else:
             items_for_templates = self.get_items_for_templates()
-            lst = [f(a, b) for a in items_set for b in items_for_templates]
+            lst = [f(a, b) for a in templates_set for b in items_for_templates]
         self.current_set = set(lst)
         if len(self.total_set) > 0:
             self.total_set = self.total_set & self.current_set
@@ -1832,6 +1832,8 @@ class AboutWindow(Toplevel):
         self.parent_window = parent_window
 
     def input_your_string_for_automation_mono_game(self, event):
+        print("Ab")
+        print("Avv")
         game = self.game
         if game.game_started or game.new_game_requested or game.dual_game_enabled: return
         if not self.your_string_entry:
