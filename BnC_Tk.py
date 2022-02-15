@@ -42,8 +42,10 @@ DEFAULT_DB_PASSWORD = "Ym5jZGZsdDEh"
 DB_COMMON_ROLE = "bnc_user"
 DB_ADMIN_ROLE = "bnc_admin"
 SSL_PORT = 465
-SMTP_ADDRESS = "smtp.gmail.com"
-BNC_EMAIL = "Bulls.And.Cows.0@gmail.com"
+# SMTP_ADDRESS = "smtp.gmail.com"
+# BNC_EMAIL = "Bulls.And.Cows.0@gmail.com"
+SMTP_ADDRESS = "smtp.mail.ru"
+BNC_EMAIL = "Bulls.And.Cows@mail.ru"
 
 Base = declarative_base()
 
@@ -142,7 +144,7 @@ class Game:
         self.loggedin_user = None
         self.dual_game_enabled = True
         self.user_privileges = None
-        # self.prepare_game()
+        self.prepare_game()
         self.game_initials()
 
     @staticmethod
@@ -260,7 +262,8 @@ class Game:
     @staticmethod
     def send_pincode(email, pincode):
         # return
-        password = Game.base64_decode_("UWV0dTEyMyE=")
+        # password = Game.base64_decode_("UWV0dTEyMyE=")
+        password = Game.base64_decode_("Q3NLMDFFV0J5MVVrcVFtZDF4cTI=")
         email_msg = MIMEMultipart("alternative")
         sender_email = BNC_EMAIL
         receiver_email = email
@@ -332,7 +335,7 @@ class Game:
                 items_for_templates.append(''.join(map(str, l)))
         return items_for_templates
 
-    def my_guess(self, my_cows_raw: int, my_bulls_raw: int):
+    def my_guess(self):
         """
         The method figures out my next guess proposal based on number
         of cows and bulls that were given by you (user) for my current guess proposal.
@@ -351,7 +354,7 @@ class Game:
                  has become inconsistent, so I cannot guess your number and so I have to finish the game.
         """
 
-        def f(a, b):
+        def populate_template(a, b):
             list0 = list(a)
             list1 = []
             list1.extend(b)
@@ -360,12 +363,8 @@ class Game:
             return "".join(list0)
 
         capacity = self.capacity
-        if not self.your_string_for_automation_mono_game:
-            self.my_cows = my_cows = int(my_cows_raw)
-            self.my_bulls = my_bulls = int(my_bulls_raw)
-        else:
-            my_cows = self.my_cows
-            my_bulls = self.my_bulls
+        my_cows = self.my_cows
+        my_bulls = self.my_bulls
         self.my_history_list.append((self.guess_proposal, my_cows, my_bulls))
         if my_cows == capacity and my_bulls == capacity:
             # raise FinishedOKException
@@ -391,7 +390,7 @@ class Game:
             lst = ["".join(x) for x in templates_set]
         else:
             items_for_templates = self.get_items_for_templates()
-            lst = [f(a, b) for a in templates_set for b in items_for_templates]
+            lst = [populate_template(a, b) for a in templates_set for b in items_for_templates]
         self.current_set = set(lst)
         if len(self.total_set) > 0:
             self.total_set = self.total_set & self.current_set
@@ -405,7 +404,7 @@ class Game:
         return False
 
     @staticmethod
-    def calc_bulls_and_cows(true_number, guess_number):
+    def calc_bulls_and_cows(true_number: str, guess_number:str):
         cows = bulls = 0
         for i0, c0 in enumerate(true_number):
             for i1, c1 in enumerate(guess_number):
@@ -419,13 +418,11 @@ class Game:
     @staticmethod
     def validate_cows_and_bulls(cows_raw, bulls_raw, capacity):
         if not (cows_raw.isdigit() and bulls_raw.isdigit()):
-            # return ResponseMsg("Number of Cows and Bulls must be a digit", "error")
             raise BnCException("Number of Cows and Bulls must be a digit")
         cows = int(cows_raw)
         bulls = int(bulls_raw)
         if (cows == capacity and bulls == capacity - 1) or (
                 bulls > cows) or bulls > capacity or cows > capacity:
-            # return ResponseMsg("Erroneous input combination! Try again!", "error")
             raise BnCException("Erroneous input combination! Try again!")
 
     def your_guess(self, your_guess_string):
@@ -821,7 +818,7 @@ class Game:
         self.your_history_list.clear()
         self.my_cows = None
         self.my_bulls = None
-        self.your_string_for_automation_mono_game = None
+        self.your_string_for_automation_game = None
         self.my_string_for_you = None
         self.your_cows = None
         self.your_bulls = None
@@ -1283,10 +1280,9 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.new_game_window()
             return
         # self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
-        # self.attempts_label['text'] = 'Attempts: ' + str(game.attempts)
         # self.status_label["text"] = f"Attempts: {str(self.game.attempts)}      Duration 00:00:{self.count}"
         self.update_status_label()
-        if not game.your_string_for_automation_mono_game:
+        if not game.your_string_for_automation_game:
             self.my_cows_label["state"] = "normal"
             self.my_cows_entry["state"] = "normal"
             self.my_bulls_label["state"] = "normal"
@@ -1314,17 +1310,28 @@ class MainWin(Tk, AdditionalWindowMethods):
             else:
                 self.change_data_on_window_mono_game()
             return
-        my_cows_entered = self.my_cows_entry.get().strip()
-        my_bulls_entered = self.my_bulls_entry.get().strip()
         try:
-            game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
             if game.dual_game_enabled and game.attempts > 0:
                 your_guess_entered = self.your_guess_entry.get().strip()
                 game.validate_your_string(game.capacity, your_guess_entered)
                 your_result = game.your_guess(your_guess_entered)
+                my_cows_entered = self.my_cows_entry.get().strip()
+                my_bulls_entered = self.my_bulls_entry.get().strip()
+                game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
+                game.my_cows = int(my_cows_entered)
+                game.my_bulls = int(my_bulls_entered)
             else:
                 your_result = False
-            my_result = game.my_guess(my_cows_entered, my_bulls_entered)
+                if game.your_string_for_automation_game:
+                    game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
+                        game.your_string_for_automation_game, game.guess_proposal)
+                else:
+                    my_cows_entered = self.my_cows_entry.get().strip()
+                    my_bulls_entered = self.my_bulls_entry.get().strip()
+                    game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
+                    game.my_cows = int(my_cows_entered)
+                    game.my_bulls = int(my_bulls_entered)
+            my_result = game.my_guess()
         except FinishedNotOKException:
             self.finish_game_on_main_window(0)
             return
@@ -1540,20 +1547,19 @@ class MainWin(Tk, AdditionalWindowMethods):
     def open_about_window(self):
         about_window = AboutWindow(self)
         about_window.game = self.game
-        about_window.geometry('280x90')
+        about_window.geometry(f'{about_window.win_width}x{about_window.win_height}')
         about_window.resizable(0, 0)
         about_window.lb1 = Label(
             about_window, text='This game is created by Eugene Dolgov. \nAll rights reserved \u00a9 2021.',
             font='arial 10')
-        about_window.lb1.place(x=10, y=10)
+        about_window.lb1.place(x=20, y=10)
         about_window.button = Button(about_window, text='OK', command=lambda: about_window.destroy())
-        about_window.button.place(x=120, y=50)
-        about_window.lb1.bind("<Double-Button-3>", about_window.input_your_string_for_automation_mono_game)
+        about_window.button.place(x=130, y=60)
+        about_window.lb1.bind("<Double-Button-3>", about_window.input_your_string_for_automation_game)
         about_window.button.bind("<Double-Button-3>", about_window.show_my_guessed_number)
         about_window.transient(self)
         about_window.grab_set()
         about_window.focus_set()
-        about_window.wait_window()
 
     def open_description_window(self):
         text="It's a modified version of classical game Bulls and Cows. "\
@@ -1571,7 +1577,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         # if self.text1['state'] != 'disabled' or self.text2['state'] != 'disabled':
         #     return
         def callback(sv):
-            if not self.game.game_started:
+            if not self.game.game_started and not self.game.new_game_requested:
                 setting_window.cap_button['state'] = 'normal'
                 setting_window.cap_entry["state"] = "normal"
 
@@ -1588,7 +1594,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.cap_button = Button(setting_window, text='Apply', font='arial 7',
                                            command=setting_window.get_capacity)
         setting_window.cap_button.place(x=90, y=10)
-        setting_window.cap_button['state'] = 'disabled'
         sv = StringVar()
         sv.trace("w", lambda name, index, mode, sv=sv: callback(sv))
         setting_window.cap_entry = Entry(setting_window, width=3, font='Arial 8', state='normal',
@@ -1596,6 +1601,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.cap_entry.place(x=65, y=13)
         setting_window.cap_entry.delete('0', 'end')
         setting_window.cap_entry.insert('0', game.capacity)
+        setting_window.cap_entry['state'] = 'disabled'
         setting_window.dual_game_label = Label(setting_window, text='Dual game: ', font='arial 8')
         setting_window.dual_game_label.place(x=10, y=45)
         setting_window.cb_variable = BooleanVar()
@@ -1808,7 +1814,7 @@ class SettingWindow(Toplevel):
                                                    + " unique digits!\nAnd I will think of " \
                                                      "a number to guess for you!"
         else:
-            self.main_window.upperlabel['text'] = "Think of a number with " \
+            self.main_window.upper_label['text'] = "Think of a number with " \
                                                   + str(new_capacity) + " unique digits!"
         self.main_window.upper_label['fg'] = MainWin.upper_label_normal_color
         self.cap_button['state'] = 'disabled'
@@ -1826,40 +1832,42 @@ class SettingWindow(Toplevel):
 
 
 class AboutWindow(Toplevel):
+    win_width = 300
+    win_height = 115
+
     def __init__(self, parent_window):
         super().__init__(parent_window)
         self.your_string_entry = None
         self.parent_window = parent_window
 
-    def input_your_string_for_automation_mono_game(self, event):
-        print("Ab")
-        print("Avv")
+    def input_your_string_for_automation_game(self, event):
         game = self.game
         if game.game_started or game.new_game_requested or game.dual_game_enabled: return
         if not self.your_string_entry:
-            self.geometry('280x110')
+            self.geometry(f'{self.win_width}x{self.win_height+20}')
             self.your_string_entry = Entry(self, width=game.capacity + 2, font='Arial 8', state='normal')
-            self.your_string_entry.place(x=112, y=81)
+            self.your_string_entry.place(x=135, y=100)
             return
         your_string = self.your_string_entry.get().strip()
-        if not Game.validate_your_string(game.capacity, your_string):
-            game.your_string_for_automation_mono_game = None
+        if not your_string or not your_string.isdigit() or len(your_string) != game.capacity \
+                or len(set(list(your_string))) != len(your_string):
             return
-        else:
-            game.your_string_for_automation_mono_game = your_string
+        game.your_string_for_automation_game = your_string
         self.your_string_entry.delete(0, 'end')
         self.your_string_entry.destroy()
         self.your_string_entry = None
-        self.geometry('280x90')
+        self.geometry(f'{self.win_width}x{self.win_height}')
         self.automate_answer()
 
     def automate_answer(self):
         game = self.game
+        iteration = 1
         while not (game.my_cows == game.capacity and game.my_bulls == game.capacity):
             self.parent_window.go_button_clicked()
-            game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
-                game.your_string_for_automation_mono_game, game.guess_proposal)
-        self.parent_window.go_button_clicked()  # ???
+            iteration +=1
+            # actually it's unnecessary because automation guess procedure works OK but just for safety
+            if iteration > 50:
+                break
 
     def show_my_guessed_number(self, event):
         if not self.game.dual_game_enabled:
@@ -1943,17 +1951,15 @@ class MessageBox:
         text = msg.text.strip()
         initial_text = text.split("\n")[0]  # ???
         text, width, height = MessageBox.format_text(initial_text)###
-        # match = re.search(r"{(.+)}", text)
-        # if match:
-        #     link = match.group(1)
-        #     text = re.sub("\n{"+link+"}", "", text)
         messagebox = Toplevel(parent_window) if parent_window else Tk()
         messagebox.title(msg.title)
+        # if parent_window: width = width + 30
         messagebox.geometry(str(width) + 'x' + str(height))
         messagebox.resizable(0, 0)
+        #label_pic = PhotoImage(file="error_pic.gif")
         msgbox_pic = Label(messagebox, image=msg.label_pic)
         msgbox_lb = Label(messagebox, text=text, font='arial 10', anchor='w')
-        msgbox_button_frame = Frame(messagebox, height=32, width=55)
+        msgbox_button_frame = Frame(messagebox, height=32, width=75)
         msgbox_button_frame.pack_propagate(0)
         msgbox_bt = Button(msgbox_button_frame, text="OK", width=10, command=close)
         msgbox_bt.pack()
@@ -1961,13 +1967,16 @@ class MessageBox:
         if parent_window:
             msgbox_pic.pack(side="left", padx=20)
             msgbox_lb.place(x=90, y=25)
-            msgbox_button_frame.place(x=int(width / 2), y=height - 40)
+            msgbox_button_frame.place(x=int(width/2)-30, y=height - 40)
             messagebox.transient(parent_window)
             messagebox.grab_set()
             messagebox.focus_set()
         else:
-            msgbox_lb.pack(side="top", pady=10)
-            msgbox_button_frame.pack(side="bottom", pady=20)
+            msgbox_pic.pack(side="left", padx=20)
+            msgbox_lb.place(x=90, y=25)
+            msgbox_button_frame.place(x=int(width / 2), y=height - 40)
+            #msgbox_lb.pack(side="top", pady=10)
+            # msgbox_button_frame.pack(side="bottom", pady=20)
             messagebox.mainloop()
 
     @staticmethod
@@ -1982,13 +1991,14 @@ class MessageBox:
             if is_logout:
                 run()
         text, width, height = MessageBox.format_text(msg.text.strip())
+        #width = width + 50
         msgbox = Toplevel(parent_window)
         msgbox.title("")
         msgbox.geometry(str(width) + 'x' + str(height))
         msgbox.resizable(0, 0)
         msgbox_pic = Label(msgbox, image=msg.label_pic)
         msgbox_pic.pack(side="left", padx=20)
-        msgbox_lb = Label(msgbox, text=text, font='arial 12', anchor='w')
+        msgbox_lb = Label(msgbox, text=text, font='arial 10', anchor='w')
         msgbox_lb.place(x=80, y=20)
         msgbox_yes_bt = Button(msgbox, text="Yes", width=8, command=yes)
         msgbox_yes_bt.place(x=int(width/2)-70, y=height-50) #continue from this
@@ -2013,10 +2023,10 @@ class MessageBox:
                 if len(result_str + " " + c) < maximum_length:
                     result_str += " " + c
                 else:
-                    # result_str += " " + c
+                    result_str += " " + c
                     longest_length = max(len(result_str), longest_length)
                     r_list.append(result_str)
-                    result_str = c
+                    result_str = ""
             if len(initial_text_list) != len(r_list):
                 r_list.append(result_str)
             total_text = "\n".join(r_list)
@@ -2025,8 +2035,11 @@ class MessageBox:
         else:
             number_of_rows = len(r_list)
         #width = longest_length * 10 + 50 - (longest_length//35)*55
-        width = longest_length * (11 - longest_length//20) + 50
-        height = number_of_rows * 20 + 95 - (number_of_rows//10)*15
+        #width = longest_length * (11 - longest_length//20) + 50
+
+        #width = longest_length * 9 + 50*( 1 if longest_length < 40 else 0) - 5 * longest_length//20 * (( 0 if longest_length < 20 else 1) )
+        width = longest_length * 9 + 80 - longest_length - int(60*longest_length/maximum_length)
+        height = number_of_rows * 16 + 95
         return total_text, width, height
 
 
@@ -2039,34 +2052,34 @@ class ExitMessage:
         self.parent_window = parent_window
 
 
-class ResponseMsg:
-    def __init__(self, msg_text, msg_type):
-        self.msg_text = msg_text
-        self.msg_type = msg_type
-
-    def text(self):
-        return self.msg_text
-
-    def title(self):
-        return self.msg_type.upper()
-
-    def is_error(self):
-        if self.msg_type.lower() == "error":
-            return True
-        else:
-            return False
-
-    def is_warning(self):
-        if self.msg_type.lower() == "warning":
-            return True
-        else:
-            return False
-
-    def is_ok(self):
-        if self.msg_type.lower() == "info":
-            return True
-        else:
-            return False
+# class ResponseMsg:
+#     def __init__(self, msg_text, msg_type):
+#         self.msg_text = msg_text
+#         self.msg_type = msg_type
+#
+#     def text(self):
+#         return self.msg_text
+#
+#     def title(self):
+#         return self.msg_type.upper()
+#
+#     def is_error(self):
+#         if self.msg_type.lower() == "error":
+#             return True
+#         else:
+#             return False
+#
+#     def is_warning(self):
+#         if self.msg_type.lower() == "warning":
+#             return True
+#         else:
+#             return False
+#
+#     def is_ok(self):
+#         if self.msg_type.lower() == "info":
+#             return True
+#         else:
+#             return False
 
 
 class BaseMessage:
@@ -2164,11 +2177,20 @@ def run():
     else:
         main_win.enable_mono_game()
     main_win.show_main_window_menu()
-    # main_win.open_login_window()
+    #main_win.open_login_window()
     main_win.mainloop()
     print("the end")
 
 
+def msgtest():
+    for a in range(0,71):
+        t = "Password " + "a"*a
+        t = "Are yoy sure yoy want to quit?"
+        msg = f"{t} {len(t):2d}"
+        MessageBox.show_message(None, ErrorMessage(msg))
+
+
 if __name__ == '__main__':
+    #msgtest()
     run()
     print("the end2")
