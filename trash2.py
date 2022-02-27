@@ -79,6 +79,4 @@ def send_pincode():
 # send_pincode()
 
 # from functools import reduce
-t = "aaannnnnnnnnnnnnnnnnnnnnnnnn"
-msg = f"{t}{len(t):2}"
-print(msg)
+

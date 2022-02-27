@@ -16,6 +16,8 @@ import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from passlib.context import CryptContext
+import yaml
+from yaml.loader import SafeLoader
 
 import psycopg2
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Date
@@ -27,8 +29,7 @@ from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
 
-
-
+CONFIG_PATH = "."
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
 DB_CONN_STRING_PRE = "postgresql+psycopg2://"
 DB_SOCKET = "rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432"
@@ -92,20 +93,41 @@ class FixtureList(Base):
 
 
 class Game:
-    text_for_restoring_password = """\
-    Subject: Restoring your password
+    text_for_recovering_password = """\
+    Subject: Recovering your password
 
     Hello dear customer!
     Your pincode for password recovering: PINCODE
     Thank you for contacting us. Have a nice day!
     """
-    html_for_restoring_password = """\
+    html_for_recovering_password = """\
     <html>
       <body>
         <p><h3>Hello dear customer!</h3><br>
            We have received a request from you to recover your password.<br>
            Your pincode for password recovery: <h4>PINCODE<h/4><br><br>
            Thank you for contacting us. Have a nice day!<br>
+            -- Best regards, BnC team. 
+        </p>
+      </body>
+    </html>
+    """
+    text_for_greeting = """\
+    Subject: Welcome to "Bulls and Cows" Game!
+    
+    Hello FIRSTNAME LASTNAME!
+    We are welcoming you at "Bulls and Cows" Game!
+    Hope you will enjoy this intellectual masterpiece and you will win me althought it's not easy!:)
+    Good luck! 
+    """
+    html_for_greeting = """\
+    <html>
+      <body>
+        <p><h3>Hello FISRTNAME LASTNAME!</h3><br>
+               We are welcoming you at "Bulls and Cows" Game!<br>
+               Hope you will enjoy this intellectual masterpiece \
+               and you will win me althought it's not easy!:)<br>
+               Good luck!<br><br>
             -- Best regards, BnC team. 
         </p>
       </body>
@@ -144,7 +166,7 @@ class Game:
         self.loggedin_user = None
         self.dual_game_enabled = True
         self.user_privileges = None
-        self.prepare_game()
+        #self.prepare_game()
         self.game_initials()
 
     @staticmethod
@@ -271,19 +293,48 @@ class Game:
         email_msg["Subject"] = "Recover your password"
         email_msg["From"] = sender_email
         email_msg["To"] = receiver_email
-        text_for_restoring_password = Game.text_for_restoring_password.replace(
+        text_for_recovering_password = Game.text_for_recovering_password.replace(
             "PINCODE", pincode
         )
-        html_for_restoring_password = Game.html_for_restoring_password.replace(
+        html_for_recovering_password = Game.html_for_recovering_password.replace(
             "PINCODE", pincode
         )
-        p1 = MIMEText(text_for_restoring_password, "plain")
-        p2 = MIMEText(html_for_restoring_password, "html")
+        p1 = MIMEText(text_for_recovering_password, "plain")
+        p2 = MIMEText(html_for_recovering_password, "html")
         email_msg.attach(p1)
         email_msg.attach(p2)
         context = ssl.create_default_context()
         try:
 
+            with smtplib.SMTP_SSL(SMTP_ADDRESS, SSL_PORT, context=context) as srv:
+                srv.login(BNC_EMAIL, password)
+                srv.sendmail(sender_email, receiver_email, email_msg.as_string())
+        except Exception:
+            raise
+
+    @staticmethod
+    def send_email(email, message_type, replace_list):
+        password = Game.base64_decode_("Q3NLMDFFV0J5MVVrcVFtZDF4cTI=")
+        email_msg = MIMEMultipart("alternative")
+        sender_email = BNC_EMAIL
+        receiver_email = email
+        # receiver_email = "stayerx@gmail.com"
+        subject = Game.email_messages[message_type]['subject']
+        email_msg["Subject"] = subject
+        email_msg["From"] = sender_email
+        email_msg["To"] = receiver_email
+        ### continue
+        text = Game.email_messages[message_type]['text']
+        html = Game.email_messages[message_type]['html']
+        for e in replace_list:
+            text = text.replace(e[0], e[1])
+            html = html.replace(e[0], e[1])
+        p1 = MIMEText(text, "plain")
+        p2 = MIMEText(html, "html")
+        email_msg.attach(p1)
+        email_msg.attach(p2)
+        context = ssl.create_default_context()
+        try:
             with smtplib.SMTP_SSL(SMTP_ADDRESS, SSL_PORT, context=context) as srv:
                 srv.login(BNC_EMAIL, password)
                 srv.sendmail(sender_email, receiver_email, email_msg.as_string())
@@ -355,6 +406,13 @@ class Game:
         """
 
         def populate_template(a, b):
+            """
+            The method replace a vacant place (letter 'V') in 'a' agrument (a template) with a digit from
+            b argument consequently. So it makes one possible guess number for guess numbers set.
+            :param a: a template with 'V's and digits from the guess number
+            :param b: digits which will be put instead of 'V'
+            :return: one possible guess number for guess numbers set
+            """
             list0 = list(a)
             list1 = []
             list1.extend(b)
@@ -396,6 +454,7 @@ class Game:
             self.total_set = self.total_set & self.current_set
         else:
             self.total_set = self.current_set.copy()
+        # self.write_set()
         if len(self.total_set) == 0:
             raise FinishedNotOKException
         self.guess_proposal = choice(tuple(self.total_set))
@@ -403,8 +462,26 @@ class Game:
         self.current_set.clear()
         return False
 
+    def write_set(self):
+        guess_proposal = str(self.guess_proposal)
+        cows = str(self.my_cows)
+        bulls = str(self.my_bulls)
+        path = "dump_set_" + guess_proposal + "_" + cows + "_" + bulls
+        with open(path,"w") as f:
+            f.write(guess_proposal+'\n')
+            f.write(cows+'\n')
+            f.write(bulls+'\n')
+            for i in self.total_set:
+                f.write(str("".join(i))+'\n')
+
     @staticmethod
     def calc_bulls_and_cows(true_number: str, guess_number:str):
+        """
+        The method calculates a number of cows and a number of bulls based on the true number and a guess number
+        :param true_number: string
+        :param guess_number: string
+        :return: tuple (cows, bulls)
+        """
         cows = bulls = 0
         for i0, c0 in enumerate(true_number):
             for i1, c1 in enumerate(guess_number):
@@ -647,8 +724,8 @@ class Game:
         if not Game.sessions[user]:
             if user == Game.default_db_user:
                 password = Game.base64_decode_(password)
-            db_conn_string = DB_CONN_STRING_PRE + str(user) + ":" + str(password) + "@" \
-                             + DB_SOCKET + "/" + DB_NAME
+            db_conn_string = Game.db_conn_string_pre + str(user) + ":" + str(password) + "@" \
+                             + Game.socket + "/" + Game.db_name
             # m = re.search(r":([^/].+)@", DB_CONN_STRING)
             # db_conn_string = DB_CONN_STRING.replace(m.group(1), Game.base64_decode_(m.group(1)))
             try:
@@ -884,6 +961,21 @@ class Game:
             data_for_treeview.append(entry)
         return data_for_treeview
 
+    def read_config(self):
+        with open(CONFIG_PATH) as f:
+            raw_config = yaml.load(f, Loader=SafeLoader)
+        Game.email_messages = dict()
+        Game.email_messages["welcome"] = dict()
+        Game.email_messages["pincode"] = dict()
+        Game.email_messages["welcome"]["text"] = raw_config["welcome_text"]
+        Game.email_messages["welcome"]["html"] = raw_config["welcome_html"]
+        Game.email_messages["pincode"]["text"] = raw_config["pincode_text"]
+        Game.email_messages["pincode"]["html"] = raw_config["pincode_html"]
+        Game.db_conn_string_pre = raw_config["db_connection_string_prefix"]
+        Game.db_socket = raw_config["db_socket"]
+        Game.admin_user = raw_config["admin_user"]
+        Game.smtp_address = raw_config["smtp_address"]
+        Game.bnc_email = raw_config["bnc_email"]
 
 class AdditionalWindowMethods:
     def open_users_window(self):
@@ -1089,6 +1181,11 @@ class UsersWindow(Toplevel):
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
+        replace_list[0][0] = "FIRSTNAME"
+        replace_list[0][1] = firstname
+        replace_list[1][0] = "LASTNAME"
+        replace_list[1][1] = lastname
+        Game.send_email(email, "welcome", replace_list)
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
         self.password_entry2.delete(0, 'end')
@@ -1310,27 +1407,30 @@ class MainWin(Tk, AdditionalWindowMethods):
             else:
                 self.change_data_on_window_mono_game()
             return
-        try:
-            if game.dual_game_enabled and game.attempts > 0:
-                your_guess_entered = self.your_guess_entry.get().strip()
+        if game.your_string_for_automation_game:
+            game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
+                game.your_string_for_automation_game, game.guess_proposal)
+        else:
+            my_cows_entered = self.my_cows_entry.get().strip()
+            my_bulls_entered = self.my_bulls_entry.get().strip()
+            try:
+                game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
+            except Exception as exc:
+                MessageBox.show_message(self, ErrorMessage(str(exc)))
+                return
+            game.my_cows = int(my_cows_entered)
+            game.my_bulls = int(my_bulls_entered)
+        if game.dual_game_enabled and game.attempts > 0:
+            your_guess_entered = self.your_guess_entry.get().strip()
+            try:
                 game.validate_your_string(game.capacity, your_guess_entered)
                 your_result = game.your_guess(your_guess_entered)
-                my_cows_entered = self.my_cows_entry.get().strip()
-                my_bulls_entered = self.my_bulls_entry.get().strip()
-                game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
-                game.my_cows = int(my_cows_entered)
-                game.my_bulls = int(my_bulls_entered)
-            else:
-                your_result = False
-                if game.your_string_for_automation_game:
-                    game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
-                        game.your_string_for_automation_game, game.guess_proposal)
-                else:
-                    my_cows_entered = self.my_cows_entry.get().strip()
-                    my_bulls_entered = self.my_bulls_entry.get().strip()
-                    game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
-                    game.my_cows = int(my_cows_entered)
-                    game.my_bulls = int(my_bulls_entered)
+            except Exception as exc:
+                MessageBox.show_message(self, ErrorMessage(str(exc)))
+                return
+        else:
+            your_result = False
+        try:
             my_result = game.my_guess()
         except FinishedNotOKException:
             self.finish_game_on_main_window(0)
@@ -1833,7 +1933,7 @@ class SettingWindow(Toplevel):
 
 class AboutWindow(Toplevel):
     win_width = 300
-    win_height = 115
+    win_height = 111
 
     def __init__(self, parent_window):
         super().__init__(parent_window)
@@ -1870,7 +1970,7 @@ class AboutWindow(Toplevel):
                 break
 
     def show_my_guessed_number(self, event):
-        if not self.game.dual_game_enabled:
+        if self.game.dual_game_enabled:
             self.button["text"] = self.game.my_string_for_you
 
 
