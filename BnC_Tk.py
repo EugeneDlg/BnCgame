@@ -29,6 +29,7 @@ from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
 CONFIG_PATH = "bnc_config.yml"
+PHRASES_PATH = "good_phrases"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
 DB_NAME = "bnc"
 USERS_TABLE = "users"
@@ -82,22 +83,22 @@ class FixtureList(Base):
 
 
 class Game:
-    good_mood_phrases = [
-        "Wishing you and me an interesting game!",
-        "Hope you will win!:) (Actually not, ha-ha)",
-        "Best luck for your playing! I believe in you!:)",
-        "May God bless you with boundless success!",
-        "Stop worrying and start doing!",
-        "I know nothing can make you down. Nothing can damage your confidence!",
-        "Stop masturbating and play carefully!",
-        "Put your best efforts and earn your success!",
-        "Great accomplishments and success are my best wishes for you today!",
-        "My good wishes will always be with you. Best of luck!",
-        "I am not a bit worried about your win. As I believe in you!"
-        "Ace it.",
-        "Sending you abundant wishes for this game!",
-        "Failure and success are the two sides of the same coin. So don’t get nervous!"
-    ]
+    # good_mood_phrases = [
+    #     "Wishing you and me an interesting game!",
+    #     "Hope you will win!:) (Actually not, ha-ha)",
+    #     "Best luck for your playing! I believe in you!:)",
+    #     "May God bless you with boundless success!",
+    #     "Stop worrying and start doing!",
+    #     "I know nothing can make you down. Nothing can damage your confidence!",
+    #     "Stop masturbating and play carefully!",
+    #     "Put your best efforts and earn your success!",
+    #     "Great accomplishments and success are my best wishes for you today!",
+    #     "My good wishes will always be with you. Best of luck!",
+    #     "I am not a bit worried about your win. As I believe in you!"
+    #     "Ace it.",
+    #     "Sending you abundant wishes for this game!",
+    #     "Failure and success are the two sides of the same coin. So don’t get nervous!"
+    # ]
 
     db_common_role = DB_COMMON_ROLE
     db_admin_role = DB_ADMIN_ROLE
@@ -113,6 +114,7 @@ class Game:
     ssl_port = None
     default_db_user = None
     default_db_password = None
+    good_mood_phrases = None
 
     def __init__(self, capacity=4):
         super().__init__()
@@ -125,9 +127,10 @@ class Game:
         self.loggedin_user = None
         self.dual_game_enabled = True
         self.user_privileges = None
-        # self.prepare_game()
-        self.game_initials()
         self.read_config()
+        self.prepare_game()
+        self.game_initials()
+
 
     @staticmethod
     def overlap_set_items(a0, a1):
@@ -942,6 +945,12 @@ class Game:
         Game.bnc_email = raw_config["bnc_email"]
         Game.ssl_port = raw_config["ssl_port"]
         Game.smtp_password = raw_config["smtp_password"]
+
+    @staticmethod
+    def read_phrases():
+        with open(PHRASES_PATH) as f:
+            l = f.read()
+            Game.good_mood_phrases = l.split("\n")
 
 
 class AdditionalWindowMethods:
@@ -2251,7 +2260,7 @@ def run():
     else:
         main_win.enable_mono_game()
     main_win.show_main_window_menu()
-    # main_win.open_login_window()
+    main_win.open_login_window()
     main_win.mainloop()
     print("the end")
 
