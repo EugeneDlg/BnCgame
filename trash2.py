@@ -4,6 +4,7 @@ import re
 import base64
 # print(base64.b64encode("bncdflt1!".encode("ascii")).decode("ascii"))
 # print(base64.b64encode("tP$sa7Ml".encode("ascii")).decode("ascii"))
+# from functools import reduce
 print(base64.b64encode("CsK01EWBy1UkqQmd1xq2".encode("ascii")).decode("ascii"))
 
 a = [6,7,8,9]
@@ -78,5 +79,7 @@ def send_pincode():
 
 # send_pincode()
 
-# from functools import reduce
+
+h = tuple('V'*4)
+print(h)
 

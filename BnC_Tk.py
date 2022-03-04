@@ -28,25 +28,14 @@ from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
 from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
-
-CONFIG_PATH = "."
+CONFIG_PATH = "bnc_config.yml"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
-DB_CONN_STRING_PRE = "postgresql+psycopg2://"
-DB_SOCKET = "rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432"
 DB_NAME = "bnc"
 USERS_TABLE = "users"
 PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
-ADMIN_USER = "admin"
-DEFAULT_DB_USER = "bnc_default"
-DEFAULT_DB_PASSWORD = "Ym5jZGZsdDEh"
 DB_COMMON_ROLE = "bnc_user"
 DB_ADMIN_ROLE = "bnc_admin"
-SSL_PORT = 465
-# SMTP_ADDRESS = "smtp.gmail.com"
-# BNC_EMAIL = "Bulls.And.Cows.0@gmail.com"
-SMTP_ADDRESS = "smtp.mail.ru"
-BNC_EMAIL = "Bulls.And.Cows@mail.ru"
 
 Base = declarative_base()
 
@@ -93,46 +82,6 @@ class FixtureList(Base):
 
 
 class Game:
-    text_for_recovering_password = """\
-    Subject: Recovering your password
-
-    Hello dear customer!
-    Your pincode for password recovering: PINCODE
-    Thank you for contacting us. Have a nice day!
-    """
-    html_for_recovering_password = """\
-    <html>
-      <body>
-        <p><h3>Hello dear customer!</h3><br>
-           We have received a request from you to recover your password.<br>
-           Your pincode for password recovery: <h4>PINCODE<h/4><br><br>
-           Thank you for contacting us. Have a nice day!<br>
-            -- Best regards, BnC team. 
-        </p>
-      </body>
-    </html>
-    """
-    text_for_greeting = """\
-    Subject: Welcome to "Bulls and Cows" Game!
-    
-    Hello FIRSTNAME LASTNAME!
-    We are welcoming you at "Bulls and Cows" Game!
-    Hope you will enjoy this intellectual masterpiece and you will win me althought it's not easy!:)
-    Good luck! 
-    """
-    html_for_greeting = """\
-    <html>
-      <body>
-        <p><h3>Hello FISRTNAME LASTNAME!</h3><br>
-               We are welcoming you at "Bulls and Cows" Game!<br>
-               Hope you will enjoy this intellectual masterpiece \
-               and you will win me althought it's not easy!:)<br>
-               Good luck!<br><br>
-            -- Best regards, BnC team. 
-        </p>
-      </body>
-    </html>
-    """
     good_mood_phrases = [
         "Wishing you and me an interesting game!",
         "Hope you will win!:) (Actually not, ha-ha)",
@@ -149,11 +98,21 @@ class Game:
         "Sending you abundant wishes for this game!",
         "Failure and success are the two sides of the same coin. So don’t get nervous!"
     ]
-    default_db_user = DEFAULT_DB_USER
-    default_db_password = DEFAULT_DB_PASSWORD
+
     db_common_role = DB_COMMON_ROLE
     db_admin_role = DB_ADMIN_ROLE
     sessions = defaultdict(bool)
+    email_messages = dict()
+    email_messages["welcome"] = dict()
+    email_messages["pincode"] = dict()
+    db_conn_string_pre = None
+    db_socket = None
+    admin_user = None
+    smtp_address = None
+    bnc_email = None
+    ssl_port = None
+    default_db_user = None
+    default_db_password = None
 
     def __init__(self, capacity=4):
         super().__init__()
@@ -166,8 +125,9 @@ class Game:
         self.loggedin_user = None
         self.dual_game_enabled = True
         self.user_privileges = None
-        #self.prepare_game()
+        # self.prepare_game()
         self.game_initials()
+        self.read_config()
 
     @staticmethod
     def overlap_set_items(a0, a1):
@@ -281,40 +241,43 @@ class Game:
         if not r:
             raise IncorrectPasswordException
 
-    @staticmethod
-    def send_pincode(email, pincode):
-        # return
-        # password = Game.base64_decode_("UWV0dTEyMyE=")
-        password = Game.base64_decode_("Q3NLMDFFV0J5MVVrcVFtZDF4cTI=")
-        email_msg = MIMEMultipart("alternative")
-        sender_email = BNC_EMAIL
-        receiver_email = email
-        # receiver_email = "stayerx@gmail.com"
-        email_msg["Subject"] = "Recover your password"
-        email_msg["From"] = sender_email
-        email_msg["To"] = receiver_email
-        text_for_recovering_password = Game.text_for_recovering_password.replace(
-            "PINCODE", pincode
-        )
-        html_for_recovering_password = Game.html_for_recovering_password.replace(
-            "PINCODE", pincode
-        )
-        p1 = MIMEText(text_for_recovering_password, "plain")
-        p2 = MIMEText(html_for_recovering_password, "html")
-        email_msg.attach(p1)
-        email_msg.attach(p2)
-        context = ssl.create_default_context()
-        try:
-
-            with smtplib.SMTP_SSL(SMTP_ADDRESS, SSL_PORT, context=context) as srv:
-                srv.login(BNC_EMAIL, password)
-                srv.sendmail(sender_email, receiver_email, email_msg.as_string())
-        except Exception:
-            raise
+    # @staticmethod
+    # def send_pincode(email, pincode):
+    #     # return
+    #     # password = Game.base64_decode_("UWV0dTEyMyE=")
+    #     password = Game.base64_decode_("Q3NLMDFFV0J5MVVrcVFtZDF4cTI=")
+    #     email_msg = MIMEMultipart("alternative")
+    #     sender_email = BNC_EMAIL
+    #     receiver_email = email
+    #     # receiver_email = "stayerx@gmail.com"
+    #     email_msg["Subject"] = "Recover your password"
+    #     email_msg["From"] = sender_email
+    #     email_msg["To"] = receiver_email
+    #     text_for_recovering_password = Game.text_for_recovering_password.replace(
+    #         "PINCODE", pincode
+    #     )
+    #     html_for_recovering_password = Game.html_for_recovering_password.replace(
+    #         "PINCODE", pincode
+    #     )
+    #     p1 = MIMEText(text_for_recovering_password, "plain")
+    #     p2 = MIMEText(html_for_recovering_password, "html")
+    #     email_msg.attach(p1)
+    #     email_msg.attach(p2)
+    #     context = ssl.create_default_context()
+    #     try:
+    #
+    #         with smtplib.SMTP_SSL(SMTP_ADDRESS, SSL_PORT, context=context) as srv:
+    #             srv.login(BNC_EMAIL, password)
+    #             srv.sendmail(sender_email, receiver_email, email_msg.as_string())
+    #     except Exception:
+    #         raise
 
     @staticmethod
     def send_email(email, message_type, replace_list):
-        password = Game.base64_decode_("Q3NLMDFFV0J5MVVrcVFtZDF4cTI=")
+        password = Game.base64_decode_(Game.smtp_password)
+        smtp_address = Game.smtp_address
+        ssl_port = Game.ssl_port
+        bnc_email = Game.bnc_email
         email_msg = MIMEMultipart("alternative")
         sender_email = BNC_EMAIL
         receiver_email = email
@@ -335,8 +298,8 @@ class Game:
         email_msg.attach(p2)
         context = ssl.create_default_context()
         try:
-            with smtplib.SMTP_SSL(SMTP_ADDRESS, SSL_PORT, context=context) as srv:
-                srv.login(BNC_EMAIL, password)
+            with smtplib.SMTP_SSL(smtp_address, ssl_port, context=context) as srv:
+                srv.login(bnc_email, password)
                 srv.sendmail(sender_email, receiver_email, email_msg.as_string())
         except Exception:
             raise
@@ -467,15 +430,15 @@ class Game:
         cows = str(self.my_cows)
         bulls = str(self.my_bulls)
         path = "dump_set_" + guess_proposal + "_" + cows + "_" + bulls
-        with open(path,"w") as f:
-            f.write(guess_proposal+'\n')
-            f.write(cows+'\n')
-            f.write(bulls+'\n')
+        with open(path, "w") as f:
+            f.write(guess_proposal + '\n')
+            f.write(cows + '\n')
+            f.write(bulls + '\n')
             for i in self.total_set:
-                f.write(str("".join(i))+'\n')
+                f.write(str("".join(i)) + '\n')
 
     @staticmethod
-    def calc_bulls_and_cows(true_number: str, guess_number:str):
+    def calc_bulls_and_cows(true_number: str, guess_number: str):
         """
         The method calculates a number of cows and a number of bulls based on the true number and a guess number
         :param true_number: string
@@ -600,7 +563,7 @@ class Game:
             login = login.strip().lower()
             password = password.strip()
         else:
-            login, password, firstname, lastname, email, db_user= args
+            login, password, firstname, lastname, email, db_user = args
             login = login.strip().lower()
             password = password.strip()
             firstname = firstname.strip()
@@ -634,7 +597,8 @@ class Game:
             Game.validate_db_role(db_user)
             session = Game.get_db_session(db_user, "")
             # session.query(Privileges).filter_by(login=login).delete()
-            session.query(BnCUsers).filter_by(login=login).delete() # cascade deleting in DB (from all referenced tables)
+            session.query(BnCUsers).filter_by(
+                login=login).delete()  # cascade deleting in DB (from all referenced tables)
             session.commit()
             session.close()
         except Exception as err:
@@ -855,8 +819,6 @@ class Game:
         if not admin_data:
             raise NoAdminException
 
-
-
     def prepare_game(self):
         try:
             self.prepare_db()
@@ -913,7 +875,7 @@ class Game:
             winner=result_code,  # continue from this
             attempts=self.attempts,
             timestamp=self.start_timestamp,
-            duration=math.ceil(self.finish_timestamp-self.start_timestamp)/60
+            duration=math.ceil(self.finish_timestamp - self.start_timestamp) / 60
         )
         try:
             session = Game.get_db_session(self.loggedin_user, "")
@@ -961,21 +923,26 @@ class Game:
             data_for_treeview.append(entry)
         return data_for_treeview
 
-    def read_config(self):
+    @staticmethod
+    def read_config():
         with open(CONFIG_PATH) as f:
             raw_config = yaml.load(f, Loader=SafeLoader)
-        Game.email_messages = dict()
-        Game.email_messages["welcome"] = dict()
-        Game.email_messages["pincode"] = dict()
-        Game.email_messages["welcome"]["text"] = raw_config["welcome_text"]
-        Game.email_messages["welcome"]["html"] = raw_config["welcome_html"]
-        Game.email_messages["pincode"]["text"] = raw_config["pincode_text"]
-        Game.email_messages["pincode"]["html"] = raw_config["pincode_html"]
+        Game.email_messages["welcome"]["text"] = raw_config["welcome"]["text"]
+        Game.email_messages["welcome"]["html"] = raw_config["welcome"]["html"]
+        Game.email_messages["welcome"]["subject"] = raw_config["welcome"]["subject"]
+        Game.email_messages["pincode"]["text"] = raw_config["pincode"]["text"]
+        Game.email_messages["pincode"]["html"] = raw_config["pincode"]["html"]
+        Game.email_messages["pincode"]["subject"] = raw_config["pincode"]["subject"]
         Game.db_conn_string_pre = raw_config["db_connection_string_prefix"]
+        Game.default_db_user = raw_config["default_db_user"]
+        Game.default_db_password = raw_config["default_db_password"]
         Game.db_socket = raw_config["db_socket"]
         Game.admin_user = raw_config["admin_user"]
         Game.smtp_address = raw_config["smtp_address"]
         Game.bnc_email = raw_config["bnc_email"]
+        Game.ssl_port = raw_config["ssl_port"]
+        Game.smtp_password = raw_config["smtp_password"]
+
 
 class AdditionalWindowMethods:
     def open_users_window(self):
@@ -1068,7 +1035,7 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
             MessageBox.show_message(self, ErrorMessage(str(err)))
             return
         self.game.loggedin_user = login
-        Game.get_db_session(login, password) #remember the session for the logged in user
+        Game.get_db_session(login, password)  # remember the session for the logged in user
         r_msg = "You've successfully logged in!"
         if admin_needed:
             r_msg += " Please do not forget to create Administrator user (login \"admin\")."
@@ -1129,8 +1096,9 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
         recovery_window.focus_set()
         recovery_window.protocol("WM_DELETE_WINDOW", recovery_window.close)
         recovery_window.pincode = Game.generate_pincode()
+        replace_list = (("PINCODE", recovery_window.pincode),)
         try:
-            Game.send_pincode(email, recovery_window.pincode)
+            Game.send_email(email, "pincode", replace_list)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             recovery_window.close()
@@ -1169,7 +1137,8 @@ class UsersWindow(Toplevel):
         email = self.email_entry.get().strip()
         db_user = game.loggedin_user if game.loggedin_user else login
         if game.loggedin_user and not game.apply_privileges("create", False):
-            MessageBox.show_message(self, ErrorMessage("You have no right to create a user (you are not Administrator)"))
+            MessageBox.show_message(self,
+                                    ErrorMessage("You have no right to create a user (you are not Administrator)"))
             return
         try:
             Game.validate_user(login, password1, password2, firstname, lastname, email, op="create")
@@ -1181,10 +1150,7 @@ class UsersWindow(Toplevel):
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
-        replace_list[0][0] = "FIRSTNAME"
-        replace_list[0][1] = firstname
-        replace_list[1][0] = "LASTNAME"
-        replace_list[1][1] = lastname
+        replace_list = (("FIRSTNAME", firstname), ("LASTNAME", lastname))
         Game.send_email(email, "welcome", replace_list)
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
@@ -1199,7 +1165,8 @@ class UsersWindow(Toplevel):
         login = self.login_entry.get()
         login = login.strip().lower()
         if game.loggedin_user and not game.apply_privileges("delete", login == game.loggedin_user):
-            MessageBox.show_message(self, ErrorMessage("You have no right to delete the user (you are not Administrator)"))
+            MessageBox.show_message(self,
+                                    ErrorMessage("You have no right to delete the user (you are not Administrator)"))
             return
         try:
             Game.validate_user(login, op="other")
@@ -1215,7 +1182,7 @@ class UsersWindow(Toplevel):
                 text = "You are about to remove your account. You will be logged out." \
                        " Are you sure to proceed?"
             msg = WarningMessage(text)
-            MessageBox.show_logout_message(self, msg, True) # continue from this
+            MessageBox.show_logout_message(self, msg, True)  # continue from this
             return
         self.proceed_deleting(login)
         self.login_entry.delete(0, 'end')
@@ -1236,7 +1203,8 @@ class UsersWindow(Toplevel):
         lastname = self.lastname_entry.get()
         email = self.email_entry.get()
         if game.loggedin_user and not game.apply_privileges("modify", login == game.loggedin_user):
-            MessageBox.show_message(self, ErrorMessage("You have no right to modify the user (you are not Administrator)"))
+            MessageBox.show_message(self,
+                                    ErrorMessage("You have no right to modify the user (you are not Administrator)"))
             # messagebox.showerror(title="Error", message="You have no right to modify the user (you are not Administrator)")
             return
         try:
@@ -1463,7 +1431,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.count += 1
         self.after(1000, self.time_counter)
 
-
     def mouse_function_hide(self, event):
         self.lb3_.pack_forget()
 
@@ -1544,7 +1511,6 @@ class MainWin(Tk, AdditionalWindowMethods):
                 game.write_fl_to_db(game_result_code)
         else:
             self.add_item_to_my_history_frame()
-
 
     def change_data_on_window_mono_game(self):
         self.my_cows_entry.delete(0, "end")
@@ -1662,15 +1628,15 @@ class MainWin(Tk, AdditionalWindowMethods):
         about_window.focus_set()
 
     def open_description_window(self):
-        text="It's a modified version of classical game Bulls and Cows. "\
-             "One of participants thinks of a number which consists of "\
-             "non-repeatable digits, and the second participant tries "\
-             "to guess the number proposing variants. The first gamer "\
-             "compares the original number and the proposed one and "\
-             "reports to the second gamer two values: "\
-             "the overall amount of the coincident digits (cows) "\
-             "and the amount of the coincident digits "\
-             "which have the right position(bulls)."
+        text = "It's a modified version of classical game Bulls and Cows. " \
+               "One of participants thinks of a number which consists of " \
+               "non-repeatable digits, and the second participant tries " \
+               "to guess the number proposing variants. The first gamer " \
+               "compares the original number and the proposed one and " \
+               "reports to the second gamer two values: " \
+               "the overall amount of the coincident digits (cows) " \
+               "and the amount of the coincident digits " \
+               "which have the right position(bulls)."
         MessageBox.show_message(self, InfoMessage(text))
 
     def open_setting_window(self):
@@ -1689,7 +1655,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.resizable(0, 0)
         # self.setting_window_lf0 = LabelFrame(self.setting_window, text='Capacity:', labelanchor='n', font='arial 8', padx=30, pady=4)
         # self.setting_window_lf0.place(x=10, y=5)
-        setting_window.cap_label = Label(setting_window, text='Capacity:', font='arial 8',anchor="e")
+        setting_window.cap_label = Label(setting_window, text='Capacity:', font='arial 8', anchor="e")
         setting_window.cap_label.place(x=10, y=13)
         setting_window.cap_button = Button(setting_window, text='Apply', font='arial 7',
                                            command=setting_window.get_capacity)
@@ -1771,7 +1737,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         #  lb3_.pack_forget()
         # self.attempts_label = Label(self, text="Attempts: " + str(game.attempts), font='arial 8')
         # self.attempts_label.pack(side="bottom")
-        self.status_label = Label(self, text=f"Attempts: {str(game.attempts)}", font='arial 10', bd=1, relief=SUNKEN, anchor=E)
+        self.status_label = Label(self, text=f"Attempts: {str(game.attempts)}", font='arial 10', bd=1, relief=SUNKEN,
+                                  anchor=E)
         self.status_label.pack(fill=X, side=BOTTOM, ipady=2)
 
     def enable_dual_game(self):
@@ -1785,8 +1752,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.title("Bulls and Cows Game")
         self.upper_label = Label(self, text="Think of a number with "
                                             + str(game.capacity) + " unique digits!\n"
-                                            "And I will think of a number to guess for you!",
-                                        font='arial 12')
+                                                                   "And I will think of a number to guess for you!",
+                                 font='arial 12')
         self.upper_label.bind("<Double-Button-1>", self.mouse_function_hide)
         self.upper_label.bind("<Double-Button-3>", self.mouse_function_show)
         self.upper_label['fg'] = MainWin.upper_label_normal_color
@@ -1844,10 +1811,12 @@ class MainWin(Tk, AdditionalWindowMethods):
         # self.go_button.pack(side="bottom")
         # self.attempts_label = Label(self, text="Attempts: " + str(game.attempts), font='arial 10')
         # self.attempts_label.pack(side="bottom")
-        self.status_label = Label(self, text=f"Attempts: {str(game.attempts)}      Duration 00:00:00", font='arial 10', bd=1, relief=SUNKEN, anchor=E)
+        self.status_label = Label(self, text=f"Attempts: {str(game.attempts)}      Duration 00:00:00", font='arial 10',
+                                  bd=1, relief=SUNKEN, anchor=E)
         self.status_label.pack(fill=X, side=BOTTOM, ipady=2)
-       # self.tip_my_cows = Balloon(self)
-      #  self.tip_my_cows.bind_widget(self.my_cows_entry, ballonmsg="A total number of right digits in your number")
+
+    # self.tip_my_cows = Balloon(self)
+    #  self.tip_my_cows.bind_widget(self.my_cows_entry, ballonmsg="A total number of right digits in your number")
 
     def destroy_previous_window_items(self):
         if self.my_outer_frame:
@@ -1879,7 +1848,7 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def update_status_label(self):
         text = self.status_label["text"]
-        new_text = re.sub(r"(Attempts:\s+)(\d+)", r"\g<1>"+str(self.game.attempts), text)
+        new_text = re.sub(r"(Attempts:\s+)(\d+)", r"\g<1>" + str(self.game.attempts), text)
         self.status_label["text"] = new_text
 
     def logout(self):
@@ -1892,6 +1861,7 @@ class MainWin(Tk, AdditionalWindowMethods):
     def close(self):
         self.destroy()
         self.quit()
+
 
 class SettingWindow(Toplevel):
     width = 170
@@ -1915,7 +1885,7 @@ class SettingWindow(Toplevel):
                                                      "a number to guess for you!"
         else:
             self.main_window.upper_label['text'] = "Think of a number with " \
-                                                  + str(new_capacity) + " unique digits!"
+                                                   + str(new_capacity) + " unique digits!"
         self.main_window.upper_label['fg'] = MainWin.upper_label_normal_color
         self.cap_button['state'] = 'disabled'
         self.cap_entry["state"] = "disabled"
@@ -1944,7 +1914,7 @@ class AboutWindow(Toplevel):
         game = self.game
         if game.game_started or game.new_game_requested or game.dual_game_enabled: return
         if not self.your_string_entry:
-            self.geometry(f'{self.win_width}x{self.win_height+20}')
+            self.geometry(f'{self.win_width}x{self.win_height + 20}')
             self.your_string_entry = Entry(self, width=game.capacity + 2, font='Arial 8', state='normal')
             self.your_string_entry.place(x=135, y=100)
             return
@@ -1964,7 +1934,7 @@ class AboutWindow(Toplevel):
         iteration = 1
         while not (game.my_cows == game.capacity and game.my_bulls == game.capacity):
             self.parent_window.go_button_clicked()
-            iteration +=1
+            iteration += 1
             # actually it's unnecessary because automation guess procedure works OK but just for safety
             if iteration > 50:
                 break
@@ -1980,6 +1950,7 @@ class DescriptionWindow(Toplevel):
         self.transient(parent_window)
         self.grab_set()
         self.focus_set()
+
 
 class FixtureListTreeview(Toplevel):
     def __init__(self, parent_window, fl_data):
@@ -2048,15 +2019,16 @@ class MessageBox:
                 # self.parent_window.grab_set()
                 # self.parent_window.focus_set()
             messagebox.destroy()
+
         text = msg.text.strip()
         initial_text = text.split("\n")[0]  # ???
-        text, width, height = MessageBox.format_text(initial_text)###
+        text, width, height = MessageBox.format_text(initial_text)  ###
         messagebox = Toplevel(parent_window) if parent_window else Tk()
         messagebox.title(msg.title)
         # if parent_window: width = width + 30
         messagebox.geometry(str(width) + 'x' + str(height))
         messagebox.resizable(0, 0)
-        #label_pic = PhotoImage(file="error_pic.gif")
+        # label_pic = PhotoImage(file="error_pic.gif")
         msgbox_pic = Label(messagebox, image=msg.label_pic)
         msgbox_lb = Label(messagebox, text=text, font='arial 10', anchor='w')
         msgbox_button_frame = Frame(messagebox, height=32, width=75)
@@ -2067,7 +2039,7 @@ class MessageBox:
         if parent_window:
             msgbox_pic.pack(side="left", padx=20)
             msgbox_lb.place(x=90, y=25)
-            msgbox_button_frame.place(x=int(width/2)-30, y=height - 40)
+            msgbox_button_frame.place(x=int(width / 2) - 30, y=height - 40)
             messagebox.transient(parent_window)
             messagebox.grab_set()
             messagebox.focus_set()
@@ -2075,7 +2047,7 @@ class MessageBox:
             msgbox_pic.pack(side="left", padx=20)
             msgbox_lb.place(x=90, y=25)
             msgbox_button_frame.place(x=int(width / 2), y=height - 40)
-            #msgbox_lb.pack(side="top", pady=10)
+            # msgbox_lb.pack(side="top", pady=10)
             # msgbox_button_frame.pack(side="bottom", pady=20)
             messagebox.mainloop()
 
@@ -2090,8 +2062,9 @@ class MessageBox:
                     parent_window.main_win.close()
             if is_logout:
                 run()
+
         text, width, height = MessageBox.format_text(msg.text.strip())
-        #width = width + 50
+        # width = width + 50
         msgbox = Toplevel(parent_window)
         msgbox.title("")
         msgbox.geometry(str(width) + 'x' + str(height))
@@ -2101,9 +2074,9 @@ class MessageBox:
         msgbox_lb = Label(msgbox, text=text, font='arial 10', anchor='w')
         msgbox_lb.place(x=80, y=20)
         msgbox_yes_bt = Button(msgbox, text="Yes", width=8, command=yes)
-        msgbox_yes_bt.place(x=int(width/2)-70, y=height-50) #continue from this
+        msgbox_yes_bt.place(x=int(width / 2) - 70, y=height - 50)  # continue from this
         msgbox_no_bt = Button(msgbox, text="No", width=8, command=msgbox.destroy)
-        msgbox_no_bt.place(x=int(width/2)+40, y=height-50)
+        msgbox_no_bt.place(x=int(width / 2) + 40, y=height - 50)
         msgbox.transient(parent_window)
         msgbox.grab_set()
         msgbox.focus_set()
@@ -2134,11 +2107,11 @@ class MessageBox:
             number_of_rows = 1
         else:
             number_of_rows = len(r_list)
-        #width = longest_length * 10 + 50 - (longest_length//35)*55
-        #width = longest_length * (11 - longest_length//20) + 50
+        # width = longest_length * 10 + 50 - (longest_length//35)*55
+        # width = longest_length * (11 - longest_length//20) + 50
 
-        #width = longest_length * 9 + 50*( 1 if longest_length < 40 else 0) - 5 * longest_length//20 * (( 0 if longest_length < 20 else 1) )
-        width = longest_length * 9 + 80 - longest_length - int(60*longest_length/maximum_length)
+        # width = longest_length * 9 + 50*( 1 if longest_length < 40 else 0) - 5 * longest_length//20 * (( 0 if longest_length < 20 else 1) )
+        width = longest_length * 9 + 80 - longest_length - int(60 * longest_length / maximum_length)
         height = number_of_rows * 16 + 95
         return total_text, width, height
 
@@ -2270,6 +2243,7 @@ class LabelPics:
 
 def run():
     game = Game()
+    # Game.read_config()
     main_win = MainWin()
     main_win.game = game
     if game.dual_game_enabled:
@@ -2277,20 +2251,20 @@ def run():
     else:
         main_win.enable_mono_game()
     main_win.show_main_window_menu()
-    #main_win.open_login_window()
+    # main_win.open_login_window()
     main_win.mainloop()
     print("the end")
 
 
 def msgtest():
-    for a in range(0,71):
-        t = "Password " + "a"*a
+    for a in range(0, 71):
+        t = "Password " + "a" * a
         t = "Are yoy sure yoy want to quit?"
         msg = f"{t} {len(t):2d}"
         MessageBox.show_message(None, ErrorMessage(msg))
 
 
 if __name__ == '__main__':
-    #msgtest()
+    # msgtest()
     run()
     print("the end2")

@@ -1,25 +1,49 @@
 ---
- pincode_text: |
-   "Subject: Recovering your password
-    Hello dear customer!
-    Your pincode for password recovering: PINCODE
+  pincode:
+    subject: Recovering your password
+    text: |
+      Subject: Recovering your password
+      Hello dear customer!
+      Your pincode for password recovering: PINCODE
     
-    Thank you for contacting us. Have a nice day!"
-  pincode_html: >
-    "<html>
-     <body>
-     <p><h3>Hello dear customer!</h3><br>
-            We have received a request from you to recover your password.<br>
-            Your pincode for password recovery: <h4>PINCODE<h/4><br><br>
-            Thank you for contacting us. Have a nice day!<br>
-            -- Best regards, BnC team. 
+      Thank you for contacting us. Have a nice day!
+    html: >
+      <html>
+      <body>
+      <p><h3>Hello dear customer!</h3><br>
+             We have received a request from you to recover your password.<br>
+             Your pincode for password recovery: <h4>PINCODE<h/4><br><br>
+             Thank you for contacting us. Have a nice day!<br>
+             -- Best regards, BnC team. 
       </p>
       </body>
-      </html>"
- db_connection_string_prefix: "postgresql+psycopg2://"
- db_socket: "rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432"
- admin_user: admin
- smtp_address: smtp.mail.ru
- bnc_email: Bulls.And.Cows@mail.ru
- default_db_user: bnc_default
- default_db_password: Ym5jZGZsdDEh
+      </html>
+  welcome:
+    subject: Welcome to "Bulls and Cows" Game!
+    text: |
+      Subject: Welcome to "Bulls and Cows" Game!
+      Hello FIRSTNAME LASTNAME!
+      We are welcoming you at "Bulls and Cows" Game!
+      Hope you will enjoy this intellectual masterpiece and you will win me:)
+      Good luck!
+    html: >
+      <html>
+      <body>
+        <p><h3>Hello FISRTNAME LASTNAME!</h3><br>
+               We are welcoming you at "Bulls and Cows" Game!<br>
+               Hope you will enjoy this intellectual masterpiece 
+               and you will win me althought it's not easy!:)<br>
+               Good luck!<br><br>
+            -- Best regards, BnC team. 
+        </p>
+      </body>
+      </html>
+  db_connection_string_prefix: postgresql+psycopg2://
+  db_socket: rtrdb.cnreopapz1wl.us-east-1.rds.amazonaws.com:5432
+  default_db_user: bnc_default
+  default_db_password: Ym5jZGZsdDEh
+  smtp_address: smtp.mail.ru
+  bnc_email: Bulls.And.Cows@mail.ru
+  ssl_port: 465
+  smtp_password: Q3NLMDFFV0J5MVVrcVFtZDF4cTI=
+  admin_user: admin
