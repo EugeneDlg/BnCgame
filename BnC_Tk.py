@@ -102,19 +102,8 @@ class Game:
 
     db_common_role = DB_COMMON_ROLE
     db_admin_role = DB_ADMIN_ROLE
+    db_name = DB_NAME
     sessions = defaultdict(bool)
-    email_messages = dict()
-    email_messages["welcome"] = dict()
-    email_messages["pincode"] = dict()
-    db_conn_string_pre = None
-    db_socket = None
-    admin_user = None
-    smtp_address = None
-    bnc_email = None
-    ssl_port = None
-    default_db_user = None
-    default_db_password = None
-    good_mood_phrases = None
 
     def __init__(self, capacity=4):
         super().__init__()
@@ -484,7 +473,7 @@ class Game:
     @staticmethod
     def create_user_as_role(login_to_create, password_to_create):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             engine = session.bind.engine
             sql_command = f"create user {login_to_create} with " \
                           f"encrypted password '{password_to_create}' in role {Game.db_common_role}"
@@ -496,7 +485,7 @@ class Game:
     @staticmethod
     def modify_user_as_role(login_to_modify, password_to_modify):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             engine = session.bind.engine
             sql_command = f"alter role {login_to_modify} with encrypted password '{password_to_modify}'"
             Game.get_db_session(login_to_modify, password_to_modify)
@@ -508,7 +497,7 @@ class Game:
     @staticmethod
     def delete_user_as_role(login_to_delete):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             engine = session.bind.engine
             sql_command = f"drop role {login_to_delete}"
             with engine.connect() as con:
@@ -519,7 +508,7 @@ class Game:
     @staticmethod
     def validate_db_role(login):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             engine = session.bind.engine
             sql_command = f"select * from pg_roles where rolname='{login}'"
             with engine.connect() as con:
@@ -614,7 +603,7 @@ class Game:
     @staticmethod
     def get_user_by_login(login):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             r0 = session.query(BnCUsers).filter_by(login=login).first()
             session.close()
         except Exception:
@@ -627,7 +616,7 @@ class Game:
 
     def retrieve_user_privileges(self, login):
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(self.default_db_user, self.default_db_password)
             r0 = session.query(Privileges).filter_by(login=login).first()
             session.close()
         except Exception as err:
@@ -687,12 +676,12 @@ class Game:
         return self.user_privileges[op]
 
     @staticmethod
-    def get_db_session(user=default_db_user, password=default_db_password):
+    def get_db_session(user, password):
         if not Game.sessions[user]:
             if user == Game.default_db_user:
                 password = Game.base64_decode_(password)
             db_conn_string = Game.db_conn_string_pre + str(user) + ":" + str(password) + "@" \
-                             + Game.socket + "/" + Game.db_name
+                             + Game.db_socket + "/" + Game.db_name
             # m = re.search(r":([^/].+)@", DB_CONN_STRING)
             # db_conn_string = DB_CONN_STRING.replace(m.group(1), Game.base64_decode_(m.group(1)))
             try:
@@ -768,7 +757,7 @@ class Game:
         if op == "create":
             try:
                 r0 = Game.get_user_by_login(login)
-                session = Game.get_db_session()
+                session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
                 r1 = session.query(BnCUsers).filter_by(email=email).first()
                 session.close()
             except Exception:
@@ -832,7 +821,7 @@ class Game:
     @staticmethod
     def prepare_db():
         try:
-            session = Game.get_db_session()
+            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             inspection = inspect(session.bind.engine)
             if not (inspection.has_table(USERS_TABLE)
                     and inspection.has_table(PRIV_TABLE)
@@ -930,6 +919,10 @@ class Game:
     def read_config():
         with open(CONFIG_PATH) as f:
             raw_config = yaml.load(f, Loader=SafeLoader)
+
+        Game.email_messages = dict()
+        Game.email_messages["welcome"] = dict()
+        Game.email_messages["pincode"] = dict()
         Game.email_messages["welcome"]["text"] = raw_config["welcome"]["text"]
         Game.email_messages["welcome"]["html"] = raw_config["welcome"]["html"]
         Game.email_messages["welcome"]["subject"] = raw_config["welcome"]["subject"]

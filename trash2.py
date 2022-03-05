@@ -80,6 +80,6 @@ def send_pincode():
 # send_pincode()
 
 
-h = tuple('V'*4)
-print(h)
+
+
 
