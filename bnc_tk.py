@@ -36,7 +36,7 @@ USERS_TABLE = "users"
 PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
 DB_COMMON_ROLE = "bnc_user"
-DB_ADMIN_ROLE = "bnc_admin"
+DB_ADMIN_ROLE = "bnc_adminn"
 
 Base = declarative_base()
 
