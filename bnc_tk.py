@@ -36,7 +36,7 @@ USERS_TABLE = "users"
 PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
 DB_COMMON_ROLE = "bnc_user"
-DB_ADMIN_ROLE = "bnc_adminn"
+DB_ADMIN_ROLE = "bnc_admin"
 
 Base = declarative_base()
 
@@ -83,23 +83,6 @@ class FixtureList(Base):
 
 
 class Game:
-    # good_mood_phrases = [
-    #     "Wishing you and me an interesting game!",
-    #     "Hope you will win!:) (Actually not, ha-ha)",
-    #     "Best luck for your playing! I believe in you!:)",
-    #     "May God bless you with boundless success!",
-    #     "Stop worrying and start doing!",
-    #     "I know nothing can make you down. Nothing can damage your confidence!",
-    #     "Stop masturbating and play carefully!",
-    #     "Put your best efforts and earn your success!",
-    #     "Great accomplishments and success are my best wishes for you today!",
-    #     "My good wishes will always be with you. Best of luck!",
-    #     "I am not a bit worried about your win. As I believe in you!"
-    #     "Ace it.",
-    #     "Sending you abundant wishes for this game!",
-    #     "Failure and success are the two sides of the same coin. So don’t get nervous!"
-    # ]
-
     db_common_role = DB_COMMON_ROLE
     db_admin_role = DB_ADMIN_ROLE
     db_name = DB_NAME
@@ -269,9 +252,8 @@ class Game:
         password = Game.base64_decode_(Game.smtp_password)
         smtp_address = Game.smtp_address
         ssl_port = Game.ssl_port
-        bnc_email = Game.bnc_email
         email_msg = MIMEMultipart("alternative")
-        sender_email = BNC_EMAIL
+        sender_email = Game.bnc_email
         receiver_email = email
         # receiver_email = "stayerx@gmail.com"
         subject = Game.email_messages[message_type]['subject']
@@ -291,7 +273,7 @@ class Game:
         context = ssl.create_default_context()
         try:
             with smtplib.SMTP_SSL(smtp_address, ssl_port, context=context) as srv:
-                srv.login(bnc_email, password)
+                srv.login(sender_email, password)
                 srv.sendmail(sender_email, receiver_email, email_msg.as_string())
         except Exception:
             raise
@@ -628,7 +610,7 @@ class Game:
 
     @staticmethod
     def create_user_privileges(login, db_user):
-        if login == ADMIN_USER:
+        if login == Game.admin_user:
             user_priv = {"create_other": True, "modify_self": True, "modify_other": True,
                          "delete_self": False, "delete_other": True}
         else:
@@ -797,7 +779,7 @@ class Game:
         try:
             Game.validate_user(login, op="other")
             user_data = Game.get_user_by_login(login)
-            admin_data = Game.get_user_by_login(ADMIN_USER)
+            admin_data = Game.get_user_by_login(Game.admin_user)
         except Exception:
             raise
         if not user_data:
@@ -1058,8 +1040,6 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
         recovery_window.title("Reset password")
         recovery_window.geometry(str(RecoveryPasswordWindow.width) + 'x' + str(RecoveryPasswordWindow.height))
         recovery_window.resizable(0, 0)
-        # self.restore_window_lb0 = Label(self.restore_window, text='Please click button to send a pin-code to your
-        # email',font='arial 9')
         recovery_window.pincode_label = Label(recovery_window, text='Please enter a pincode sent to your email:',
                                               font='arial 9')
         recovery_window.pincode_label.place(x=10, y=10)
@@ -1089,9 +1069,6 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
                                              command=recovery_window.show_password)
         recovery_window.show_button.place(x=267, y=55)
         recovery_window.show_button["state"] = "disabled"
-        # self.restore_window_bt0 = Button(self.restore_window, text='Send code', font='arial 6',
-        #                                  command=self.send_pincode_eh)
-        # self.restore_window_bt0.place(x=350, y=10)
         self.grab_release()
         recovery_window.transient(self)
         recovery_window.grab_set()
@@ -1102,9 +1079,9 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
         try:
             Game.send_email(email, "pincode", replace_list)
         except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(exc))
-            recovery_window.close()
-        # recovery_window.game = self.game
+             MessageBox.show_message(self, ErrorMessage(exc))
+        recovery_window.close()
+        recovery_window.game = self.game
 
 
 class UsersWindow(Toplevel):
@@ -1153,7 +1130,10 @@ class UsersWindow(Toplevel):
             MessageBox.show_message(self, ErrorMessage(exc))
             return
         replace_list = (("FIRSTNAME", firstname), ("LASTNAME", lastname))
-        Game.send_email(email, "welcome", replace_list)
+        try:
+            Game.send_email(email, "welcome", replace_list)
+        except Exception as exc:
+            MessageBox.show_message(self, ErrorMessage(exc))
         self.login_entry.delete(0, 'end')
         self.password_entry1.delete(0, 'end')
         self.password_entry2.delete(0, 'end')
