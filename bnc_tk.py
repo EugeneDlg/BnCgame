@@ -18,7 +18,6 @@ from email.mime.multipart import MIMEMultipart
 from passlib.context import CryptContext
 import yaml
 from yaml.loader import SafeLoader
-
 import psycopg2
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Date
 from sqlalchemy import create_engine, inspect
@@ -2105,36 +2104,6 @@ class ExitMessage:
 
     def __init__(self, parent_window):
         self.parent_window = parent_window
-
-
-# class ResponseMsg:
-#     def __init__(self, msg_text, msg_type):
-#         self.msg_text = msg_text
-#         self.msg_type = msg_type
-#
-#     def text(self):
-#         return self.msg_text
-#
-#     def title(self):
-#         return self.msg_type.upper()
-#
-#     def is_error(self):
-#         if self.msg_type.lower() == "error":
-#             return True
-#         else:
-#             return False
-#
-#     def is_warning(self):
-#         if self.msg_type.lower() == "warning":
-#             return True
-#         else:
-#             return False
-#
-#     def is_ok(self):
-#         if self.msg_type.lower() == "info":
-#             return True
-#         else:
-#             return False
 
 
 class BaseMessage:
