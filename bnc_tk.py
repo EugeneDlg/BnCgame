@@ -99,6 +99,7 @@ class Game:
         self.dual_game_enabled = True
         self.user_privileges = None
         self.read_config()
+        self.read_phrases()
         self.prepare_game()
         self.game_initials()
 
@@ -1327,6 +1328,19 @@ class MainWin(Tk, AdditionalWindowMethods):
             return
         # self.lb3_['text'] = "Previous set: " + str(len(game.previous_all_set))
         # self.status_label["text"] = f"Attempts: {str(self.game.attempts)}      Duration 00:00:{self.count}"
+
+        if game.attempts == 0:
+            game.get_new_guess_proposal()
+            game.think_of_number_for_you()
+            game.attempts += 1
+            game.start_timestamp = time()
+            game.game_started = True
+            if game.dual_game_enabled:
+                self.change_data_on_window_dual_game()
+                self.time_counter()
+            else:
+                self.change_data_on_window_mono_game()
+            return
         self.update_status_label()
         if not game.your_string_for_automation_game:
             self.my_cows_label["state"] = "normal"
@@ -1344,18 +1358,6 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.your_guess_entry["state"] = "normal"
             self.your_cows_label["state"] = "normal"
             self.your_bulls_label["state"] = "normal"
-        if game.attempts == 0:
-            game.get_new_guess_proposal()
-            game.think_of_number_for_you()
-            game.attempts += 1
-            game.start_timestamp = time()
-            game.game_started = True
-            if game.dual_game_enabled:
-                self.change_data_on_window_dual_game()
-                self.time_counter()
-            else:
-                self.change_data_on_window_mono_game()
-            return
         if game.your_string_for_automation_game:
             game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
                 game.your_string_for_automation_game, game.guess_proposal)
@@ -1796,9 +1798,6 @@ class MainWin(Tk, AdditionalWindowMethods):
                                   bd=1, relief=SUNKEN, anchor=E)
         self.status_label.pack(fill=X, side=BOTTOM, ipady=2)
 
-    # self.tip_my_cows = Balloon(self)
-    #  self.tip_my_cows.bind_widget(self.my_cows_entry, ballonmsg="A total number of right digits in your number")
-
     def destroy_previous_window_items(self):
         if self.my_outer_frame:
             self.my_outer_frame.destroy()
@@ -2045,7 +2044,6 @@ class MessageBox:
                 run()
 
         text, width, height = MessageBox.format_text(msg.text.strip())
-        # width = width + 50
         msgbox = Toplevel(parent_window)
         msgbox.title("")
         msgbox.geometry(str(width) + 'x' + str(height))
@@ -2090,10 +2088,8 @@ class MessageBox:
             number_of_rows = len(r_list)
         # width = longest_length * 10 + 50 - (longest_length//35)*55
         # width = longest_length * (11 - longest_length//20) + 50
-
-        # width = longest_length * 9 + 50*( 1 if longest_length < 40 else 0) - 5 * longest_length//20 * (( 0 if longest_length < 20 else 1) )
-        width = longest_length * 9 + 80 - longest_length - int(60 * longest_length / maximum_length)
-        height = number_of_rows * 16 + 95
+        width = 80 + longest_length * 8 - int(60 * longest_length / maximum_length)
+        height = 95 + number_of_rows * 16
         return total_text, width, height
 
 
@@ -2194,7 +2190,6 @@ class LabelPics:
 
 def run():
     game = Game()
-    # Game.read_config()
     main_win = MainWin()
     main_win.game = game
     if game.dual_game_enabled:
