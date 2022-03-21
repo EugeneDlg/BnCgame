@@ -457,8 +457,12 @@ class Game:
         try:
             session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             engine = session.bind.engine
-            sql_command = f"create user {login_to_create} with " \
-                          f"encrypted password '{password_to_create}' in role {Game.db_common_role}"
+            if login_to_create != Game.admin_user:
+                sql_command = f"create user {login_to_create} with " \
+                              f"encrypted password '{password_to_create}' in role {Game.db_common_role}"
+            else:
+                sql_command = f"create user {login_to_create} with " \
+                              f"encrypted password '{password_to_create}' in role {Game.db_admin_role}"
             with engine.connect() as con:
                 con.execute(sql_command)
         except Exception:
@@ -2199,18 +2203,16 @@ def run():
     main_win.show_main_window_menu()
     main_win.open_login_window()
     main_win.mainloop()
-    print("the end")
 
 
-def msgtest():
-    for a in range(0, 71):
-        t = "Password " + "a" * a
-        t = "Are yoy sure yoy want to quit?"
-        msg = f"{t} {len(t):2d}"
-        MessageBox.show_message(None, ErrorMessage(msg))
+# def msgtest():
+#     for a in range(0, 71):
+#         t = "Password " + "a" * a
+#         t = "Are yoy sure yoy want to quit?"
+#         msg = f"{t} {len(t):2d}"
+#         MessageBox.show_message(None, ErrorMessage(msg))
 
 
 if __name__ == '__main__':
     # msgtest()
     run()
-    print("the end2")
