@@ -1344,24 +1344,25 @@ class MainWin(Tk, AdditionalWindowMethods):
                 self.time_counter()
             else:
                 self.change_data_on_window_mono_game()
+            if not game.your_string_for_automation_game:
+                self.my_cows_label["state"] = "normal"
+                self.my_cows_entry["state"] = "normal"
+                self.my_bulls_label["state"] = "normal"
+                self.my_bulls_entry["state"] = "normal"
+            else:
+                self.my_cows_label["state"] = "disabled"
+                self.my_cows_entry["state"] = "disabled"
+                self.my_bulls_label["state"] = "disabled"
+                self.my_bulls_entry["state"] = "disabled"
+            if game.dual_game_enabled:
+                self.my_upper_label["state"] = "normal"
+                self.your_upper_label["state"] = "normal"
+                self.your_guess_entry["state"] = "normal"
+                self.your_cows_label["state"] = "normal"
+                self.your_bulls_label["state"] = "normal"
             return
         self.update_status_label()
-        if not game.your_string_for_automation_game:
-            self.my_cows_label["state"] = "normal"
-            self.my_cows_entry["state"] = "normal"
-            self.my_bulls_label["state"] = "normal"
-            self.my_bulls_entry["state"] = "normal"
-        else:
-            self.my_cows_label["state"] = "disabled"
-            self.my_cows_entry["state"] = "disabled"
-            self.my_bulls_label["state"] = "disabled"
-            self.my_bulls_entry["state"] = "disabled"
-        if game.dual_game_enabled:
-            self.my_upper_label["state"] = "normal"
-            self.your_upper_label["state"] = "normal"
-            self.your_guess_entry["state"] = "normal"
-            self.your_cows_label["state"] = "normal"
-            self.your_bulls_label["state"] = "normal"
+
         if game.your_string_for_automation_game:
             game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
                 game.your_string_for_automation_game, game.guess_proposal)
