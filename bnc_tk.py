@@ -28,14 +28,13 @@ from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
 CONFIG_PATH = "bnc_config.yml"
-PHRASES_PATH = "good_phrases"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
 DB_NAME = "bnc"
 USERS_TABLE = "users"
 PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
 DB_COMMON_ROLE = "bnc_user"
-DB_ADMIN_ROLE = "bnc_admin" # ???
+DB_ADMIN_ROLE = "bnc_admin"
 
 Base = declarative_base()
 
@@ -905,7 +904,6 @@ class Game:
     def read_config():
         with open(CONFIG_PATH) as f:
             raw_config = yaml.load(f, Loader=SafeLoader)
-
         Game.email_messages = dict()
         Game.email_messages["welcome"] = dict()
         Game.email_messages["pincode"] = dict()
@@ -924,12 +922,21 @@ class Game:
         Game.bnc_email = raw_config["bnc_email"]
         Game.ssl_port = raw_config["ssl_port"]
         Game.smtp_password = raw_config["smtp_password"]
+        Game.phrases_path = raw_config["phrases_path"]
 
     @staticmethod
     def read_phrases():
-        with open(PHRASES_PATH) as f:
-            l = f.read()
-            Game.good_mood_phrases = l.split("\n")
+        try:
+            with open(Game.phrases_path) as f:
+                data = f.read()
+            lst = data.split("\n")
+            if len(lst):
+                Game.good_mood_phrases = lst
+            else:
+                lst = ["Wishing you and me an interesting game!"]
+        except Exception:
+            Game.good_mood_phrases = ["Wishing you and me an interesting game!"]
+        Game.good_mood_phrases = [e for e in Game.good_mood_phrases if len(e) < 78]
 
 
 class AdditionalWindowMethods:

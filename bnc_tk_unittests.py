@@ -1,6 +1,8 @@
 import unittest
 from bnc_tk import Game, FinishedNotOKException
 
+CONFIG_PATH = "test_bnc_config.yml"
+
 
 class TestGame(unittest.TestCase):
     def setUp(self):
@@ -108,6 +110,14 @@ class TestGame(unittest.TestCase):
         user = "admin"
         user_data = Game.load_logged_user_info(user)
         self.assertIsNotNone(user_data)
+
+    def test_create_user(self):
+        pass
+
+    def test_read_config(self):
+
+        game = self.game
+        game.read_config()
 
 
 

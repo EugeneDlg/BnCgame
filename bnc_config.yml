@@ -47,3 +47,4 @@
   ssl_port: 465
   smtp_password: Q3NLMDFFV0J5MVVrcVFtZDF4cTI=
   admin_user: admin
+  phrases_path: good_phrases
