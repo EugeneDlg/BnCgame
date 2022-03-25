@@ -169,16 +169,7 @@ class Game:
 
     @staticmethod
     def load_logged_user_info(loggedin_user):
-        try:
-            session = Game.get_db_session(loggedin_user, "")
-            r = session.query(BnCUsers).filter_by(login=loggedin_user).first()
-            session.close()
-        except Exception:
-            try:
-                session.rollback()
-            except:
-                pass
-            raise
+        r = Game.get_user_by_login(loggedin_user)
         # match = re.search(r"firstname=\'(.*)\', lastname=\'(.*)\', email=\'(.*?)\'", str(r))
         login = loggedin_user
         firstname = str(r.firstname)
@@ -686,7 +677,8 @@ class Game:
 
     @staticmethod
     def validate_user(*args, op):
-        login_pattern = re.compile(r'[^\w\-]')
+        login_pattern_0 = re.compile(r'[^\w\-]')
+        login_pattern_1 = re.compile(r'^[^A-Za-z]')
         firstname_pattern = re.compile(r'[^A-Za-z_-]')
         lastname_pattern = re.compile(r'[^A-Za-z_-]')
         email_pattern = re.compile(r'[\w.+$%!?\'-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[a-z]{2,9}$')
@@ -718,14 +710,17 @@ class Game:
         firstname = firstname.strip()
         lastname = lastname.strip()
         email = email.strip().lower()
-        login_search = login_pattern.search(login)
+        login_search_0 = login_pattern_0.search(login)
+        login_search_1 = login_pattern_1.search(login)
         email_search = email_pattern.search(email)
         if 4 > len(login):
             ret_message += "Login is too short. Login must consist of at least 4 symbols. "
         elif 20 < len(login):
             ret_message += "Login is too long. Maximal length of login is 10 symbols. "
-        elif login_search:
+        elif login_search_0:
             ret_message += "Login contains inappropriate symbols. "
+        elif login_search_1:
+            ret_message += "Login must begin with a letter. "
         ret_message += Game.validate_password(password1, password2)
         if 1 > len(firstname):
             ret_message += "First name is too short. It must consist of 1 symbol at least. "
