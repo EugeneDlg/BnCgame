@@ -15,10 +15,10 @@ import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
 from passlib.context import CryptContext
 import yaml
 from yaml.loader import SafeLoader
-import psycopg2
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Date
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine.reflection import Inspector
@@ -689,13 +689,16 @@ class Game:
             else:
                 login, = args
             login = login.strip()
-            login_search = login_pattern.search(login)
+            login_search_0 = login_pattern_0.search(login)
+            login_search_1 = login_pattern_1.search(login)
             if 4 > len(login):
                 ret_message += "Login is too short. Login must consist of at least 4 symbols. "
             elif 10 < len(login):
                 ret_message += "Login is too long. Maximum length of login is 10 symbols. "
-            elif login_search:
+            elif login_search_0:
                 ret_message += "Login contains inappropriate symbols. "
+            elif login_search_1:
+                ret_message += "Login must begin with a letter. "
             if ret_message:
                 raise BnCException(ret_message)
             r0 = Game.get_user_by_login(login)
@@ -1474,7 +1477,7 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.upper_label['text'] = "You have broken my mind! Please be more carefull!\nThink of a new number!"
             self.upper_label['fg'] = '#f00'
         elif game_result_code == 1:
-            self.upper_label['text'] = "YAHOO! I've won! Thank you for interesting play!\n" \
+            self.upper_label['text'] = "YAHOO! I've won! Thank you the for interesting game!\n" \
                                        "Attempts: " + str(self.game.attempts)
             self.upper_label['fg'] = '#00f'
         elif game_result_code == 2:
@@ -1969,7 +1972,7 @@ class FixtureListTreeview(Toplevel):
         fl_tree.pack()
         fl_tree["columns"] = ("first_name", "last_name", "login", "winner",
                               "attempts", "date", "duration")
-        fl_tree.column("#0", width=0, anchor="c", stretch=NO)
+        fl_tree.column("#0", width=0, anchor="c", stretch="no")
         fl_tree.column("first_name", width=120, anchor="c")
         fl_tree.column("last_name", width=120, anchor="c")
         fl_tree.column("login", width=120, anchor="c")
