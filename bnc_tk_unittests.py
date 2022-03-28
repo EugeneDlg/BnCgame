@@ -1,5 +1,5 @@
 import unittest
-from bnc_tk import Game, FinishedNotOKException
+from bnc_tk import Game, FinishedNotOKException, BnCException
 from secrets import choice
 from random import random, randint
 
@@ -127,12 +127,6 @@ class TestGame(unittest.TestCase):
         game = self.game
         game.read_config()
 
-    def test_get_user_by_login(self):
-        game = self.game
-        login = self.test_login
-        user_data = game.get_user_by_login(login)
-        self.assertIsNone(user_data)
-
     def test_validate_user(self):
         game = self.game
         login = self.test_login
@@ -143,6 +137,27 @@ class TestGame(unittest.TestCase):
         args = login, password, password, first_name, last_name, email
         ret_val = game.validate_user(*args, op="create")
         self.assertIsNone(ret_val)
+        args = ("1qwert",
+                "azxcV1!",
+                "azxcV1!",
+                "John",
+                "Snow",
+                "snow.j@aaaa.aa"
+                )
+        kwargs = {"op":"create"}
+        self.assertRaises(BnCException, game.validate_user, *args, **kwargs)
+
+    def test_validate_db_role(self):
+        game = self.game
+        test_login = game.default_db_user
+        args = test_login, "create"
+        self.assertRaises(BnCException, game.validate_db_user, *args)
+
+    # def test_get_user_by_login(self):
+    #     game = self.game
+    #     login = self.test_login
+    #     user_data = game.get_user_by_login(login)
+    #     self.assertIsNone(user_data)
 
     # def test_load_logged_user_info(self):
     #     game = self.game
@@ -150,24 +165,12 @@ class TestGame(unittest.TestCase):
     #     user_data = Game.load_logged_user_info(user)
     #     self.assertIsNotNone(user_data)
 
-    # def test_validate_db_role_before(self):
-    #     game = self.game
-    #     ret_val = game.validate_db_user(self.test_login, "create")
-    #     self.assertIsNone(ret_val)
-
     # def test_create_db_user(self):
     #     game = self.game
     #     login = self.test_login
     #     password = self.test_password
     #     ret_val = game.create_db_user(login, password)
     #     self.assertIsNone(ret_val)
-
-    def test_validate_db_role_after(self):
-        game = self.game
-        ret_val = game.validate_db_user(self.test_login, "other")
-        self.assertIsNone(ret_val)
-
-
 
     # def test_create_user(self):
     #     game = self.game
@@ -178,6 +181,17 @@ class TestGame(unittest.TestCase):
     #     email = self.test_email
     #     args = login, password, first_name, last_name, email, db_user
     #     game.create_user()
+
+    # def test_db(self):
+    #     get_user_by_login()
+    #     validate_user()
+    #     validate_db_role()
+    #     create_db_role()
+    #     create_user()
+    #     delete_user()
+    #     delete_db_role()
+    #     validate_db_role()
+    #     get_user_by_login()
 
 
 unittest.main()
