@@ -27,6 +27,7 @@ from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
 from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
+
 CONFIG_PATH = "bnc_config.yml"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
 DB_NAME = "bnc"
@@ -97,8 +98,6 @@ class Game:
         self.loggedin_user = None
         self.dual_game_enabled = True
         self.user_privileges = None
-        self.read_config()
-        self.read_phrases()
         self.prepare_game()
         self.game_initials()
 
@@ -784,7 +783,7 @@ class Game:
         try:
             Game.validate_user(login, op="other")
             user_data = Game.get_user_by_login(login)
-            admin_data = Game.get_user_by_login(Game.admin_user)
+            # admin_data = Game.get_user_by_login(Game.admin_user)
         except Exception:
             raise
         if not user_data:
@@ -794,9 +793,10 @@ class Game:
         try:
             Game.check_password(password_entered, password_hashed)
         except Exception:
-            raise
-        if not admin_data:
-            raise NoAdminException
+            return
+        return True
+        # if not admin_data:
+        #     raise NoAdminException
 
     def prepare_game(self):
         try:
@@ -901,44 +901,6 @@ class Game:
             entry = (login, first_name, last_name, winner, attempts, date, duration)
             data_for_treeview.append(entry)
         return data_for_treeview
-
-    @staticmethod
-    def read_config():
-        with open(CONFIG_PATH) as f:
-            raw_config = yaml.load(f, Loader=SafeLoader)
-        Game.email_messages = dict()
-        Game.email_messages["welcome"] = dict()
-        Game.email_messages["pincode"] = dict()
-        Game.email_messages["welcome"]["text"] = raw_config["welcome"]["text"]
-        Game.email_messages["welcome"]["html"] = raw_config["welcome"]["html"]
-        Game.email_messages["welcome"]["subject"] = raw_config["welcome"]["subject"]
-        Game.email_messages["pincode"]["text"] = raw_config["pincode"]["text"]
-        Game.email_messages["pincode"]["html"] = raw_config["pincode"]["html"]
-        Game.email_messages["pincode"]["subject"] = raw_config["pincode"]["subject"]
-        Game.db_conn_string_pre = raw_config["db_connection_string_prefix"]
-        Game.default_db_user = raw_config["default_db_user"]
-        Game.default_db_password = raw_config["default_db_password"]
-        Game.db_socket = raw_config["db_socket"]
-        Game.admin_user = raw_config["admin_user"]
-        Game.smtp_address = raw_config["smtp_address"]
-        Game.bnc_email = raw_config["bnc_email"]
-        Game.ssl_port = raw_config["ssl_port"]
-        Game.smtp_password = raw_config["smtp_password"]
-        Game.phrases_path = raw_config["phrases_path"]
-
-    @staticmethod
-    def read_phrases():
-        try:
-            with open(Game.phrases_path) as f:
-                data = f.read()
-            lst = data.split("\n")
-            if len(lst):
-                Game.good_mood_phrases = lst
-            else:
-                lst = ["Wishing you and me an interesting game!"]
-        except Exception:
-            Game.good_mood_phrases = ["Wishing you and me an interesting game!"]
-        Game.good_mood_phrases = [e for e in Game.good_mood_phrases if len(e) < 78]
 
 
 class AdditionalWindowMethods:
@@ -2216,14 +2178,45 @@ def run():
     main_win.mainloop()
 
 
-# def msgtest():
-#     for a in range(0, 71):
-#         t = "Password " + "a" * a
-#         t = "Are yoy sure yoy want to quit?"
-#         msg = f"{t} {len(t):2d}"
-#         MessageBox.show_message(None, ErrorMessage(msg))
+def read_config():
+    with open(CONFIG_PATH) as f:
+        raw_config = yaml.load(f, Loader=SafeLoader)
+    Game.email_messages = dict()
+    Game.email_messages["welcome"] = dict()
+    Game.email_messages["pincode"] = dict()
+    Game.email_messages["welcome"]["text"] = raw_config["welcome"]["text"]
+    Game.email_messages["welcome"]["html"] = raw_config["welcome"]["html"]
+    Game.email_messages["welcome"]["subject"] = raw_config["welcome"]["subject"]
+    Game.email_messages["pincode"]["text"] = raw_config["pincode"]["text"]
+    Game.email_messages["pincode"]["html"] = raw_config["pincode"]["html"]
+    Game.email_messages["pincode"]["subject"] = raw_config["pincode"]["subject"]
+    Game.db_conn_string_pre = raw_config["db_connection_string_prefix"]
+    Game.default_db_user = raw_config["default_db_user"]
+    Game.default_db_password = raw_config["default_db_password"]
+    Game.db_socket = raw_config["db_socket"]
+    Game.admin_user = raw_config["admin_user"]
+    Game.smtp_address = raw_config["smtp_address"]
+    Game.bnc_email = raw_config["bnc_email"]
+    Game.ssl_port = raw_config["ssl_port"]
+    Game.smtp_password = raw_config["smtp_password"]
+    Game.phrases_path = raw_config["phrases_path"]
 
 
+def read_phrases():
+    try:
+        with open(Game.phrases_path) as f:
+            data = f.read()
+        lst = data.split("\n")
+        if len(lst):
+            Game.good_mood_phrases = lst
+        else:
+            lst = ["Wishing you and me an interesting game!"]
+    except Exception:
+        Game.good_mood_phrases = ["Wishing you and me an interesting game!"]
+    Game.good_mood_phrases = [e for e in Game.good_mood_phrases if len(e) < 78]
+
+
+read_config()
+read_phrases()
 if __name__ == '__main__':
-    # msgtest()
     run()
