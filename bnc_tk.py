@@ -136,7 +136,7 @@ class Game:
         only_bulls_set = set()
         one_cow_set = set()
         total = set()
-        if cows - bulls == 0:
+        if cows == bulls:
             bulls_permut = set(map(tuple, map(sorted, permutations(range(len(current_guess)), cows))))
             for i0 in bulls_permut:
                 temp = ["V" for _ in range(capacity)]
@@ -144,7 +144,6 @@ class Game:
                     temp[i1] = current_guess[i1]
                 only_bulls_set.add(tuple(temp))
             total = only_bulls_set.copy()
-
         else:
             for i0 in range(capacity):
                 temp = ["V" for _ in range(capacity)]
@@ -179,8 +178,8 @@ class Game:
         return user_data
 
     @staticmethod
-    def generate_pincode():
-        return str(random.randint(1000, 9999))
+    def generate_pincode(cap=4):
+        return str(random.randint(10**(cap-1), 10**cap-1))
 
     @staticmethod
     def encrypt_password(password):
@@ -282,23 +281,23 @@ class Game:
                 new_guess_proposal += c
         self.guess_proposal = new_guess_proposal
 
-    @staticmethod
-    def populate(interim_str, items_for_templates):
-        guess_set = set()
-        if interim_str.count('V') == 0:
-            guess_set.add(''.join(interim_str))
-        else:
-            for y in items_for_templates:
-                i = 0
-                a = ''
-                for z in interim_str:
-                    if z == "V":
-                        a += y[i]
-                        i += 1
-                    else:
-                        a += z
-                guess_set.add(a[:])
-        return guess_set
+    # @staticmethod
+    # def populate(interim_str, items_for_templates):
+    #     guess_set = set()
+    #     if interim_str.count('V') == 0:
+    #         guess_set.add(''.join(interim_str))
+    #     else:
+    #         for y in items_for_templates:
+    #             i = 0
+    #             a = ''
+    #             for z in interim_str:
+    #                 if z == "V":
+    #                     a += y[i]
+    #                     i += 1
+    #                 else:
+    #                     a += z
+    #             guess_set.add(a[:])
+    #     return guess_set
 
     def get_items_for_templates(self):
         items_for_templates = []
@@ -1591,7 +1590,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         login_window.password_label.place(x=10, y=80)
         login_window.password_entry = Entry(login_window, width=25, font='Arial 10', show='*', state='normal')
         login_window.password_entry.place(x=100, y=80)
-        login_window.login_button = Button(login_window, text='Login', font='arial 10',
+        login_window.login_button = Button(login_window, text='Log in', font='arial 10',
                                            command=login_window.authenticate_user_eh)
         login_window.login_button.place(x=30, y=120)
         login_window.new_user_button = Button(login_window, text='New user...', font='arial 10',

@@ -193,5 +193,21 @@ class TestGame(unittest.TestCase):
     #     validate_db_role()
     #     get_user_by_login()
 
+    def test_generate_pincode(self):
+        game = self.game
+        r = game.generate_pincode()
+        self.assertIsInstance(r, str)
+        self.assertEqual(len(r), 4)
+        cap = 5
+        r = game.generate_pincode(cap)
+        self.assertIsInstance(r, str)
+        self.assertEqual(len(r), cap)
+
+    def test_encrypt_password(self):
+        game = self.game
+        password = "This is a password"
+        r = game.encrypt_password(password)
+        self.assertIsInstance(r, str)
+
 
 unittest.main()
