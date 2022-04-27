@@ -1641,6 +1641,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         if game.game_started:
             setting_window.cap_button["state"] = "disabled"
             setting_window.cap_entry["state"] = "disabled"
+            setting_window.dual_game_checkbox["state"] = "disabled"
         setting_window.transient(self)
         setting_window.grab_set()
         setting_window.focus_set()
