@@ -1,5 +1,6 @@
 import base64
 import math
+import hashlib
 import random
 import re
 from collections import defaultdict
@@ -7,7 +8,7 @@ from itertools import permutations
 from secrets import choice
 from datetime import datetime
 from time import time
-from tkinter import Label, Button, Entry, Canvas, Frame, Scrollbar, PhotoImage, LabelFrame, Menu, Checkbutton
+from tkinter import Label, Button, Entry, Frame, PhotoImage, LabelFrame, Menu, Checkbutton
 from tkinter import SUNKEN, BOTTOM, E, W, N, S, X, Y
 from tkinter import Toplevel, ttk, Tk
 from tkinter import StringVar, BooleanVar
@@ -19,19 +20,18 @@ from email.mime.multipart import MIMEMultipart
 from passlib.context import CryptContext
 import yaml
 from yaml.loader import SafeLoader
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, Date
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, TIMESTAMP
 from sqlalchemy import create_engine, inspect
-from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
 from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
-
 CONFIG_PATH = "bnc_config.yml"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
 DB_NAME = "bnc"
-USERS_TABLE = "users"
+# USERS_TABLE = "users"
+USERS_TABLE = "auth_user"
 PRIV_TABLE = "privileges"
 FL_TABLE = "fixture_list"
 DB_COMMON_ROLE = "bnc_user"
@@ -43,38 +43,35 @@ Base = declarative_base()
 class BnCUsers(Base):
     __tablename__ = USERS_TABLE
     id = Column(Integer, primary_key=True, nullable=False)
-    login = Column(String, unique=True, nullable=False)
-    firstname = Column(String, nullable=False)
-    lastname = Column(String, nullable=False)
-    email = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=False)
-
-    def __repr__(self):
-        return "<User(login='{}', firstname='{}', lastname='{}', email='{}', password='{}')>" \
-            .format(self.login, self.firstname, self.lastname, self.email, self.password)
+    password = Column(String(128), nullable=False)
+    last_login = Column(TIMESTAMP(timezone=True), nullable=True)
+    is_superuser = Column(Boolean, nullable=False)
+    username = Column(String(150), unique=True, nullable=False)
+    first_name = Column(String(150), nullable=False)
+    last_name = Column(String(150), nullable=False)
+    email = Column(String(254), unique=True, nullable=False)
+    is_staff = Column(Boolean, nullable=False)
+    is_active = Column(Boolean, nullable=False)
+    date_joined = Column(TIMESTAMP(timezone=True), nullable=False)
 
 
 class Privileges(Base):
     __tablename__ = PRIV_TABLE
     id = Column(Integer, primary_key=True, nullable=False)
-    login = Column(String, ForeignKey(USERS_TABLE + ".login", ondelete="cascade"), nullable=False)
+    # login = Column(String, ForeignKey(USERS_TABLE + ".login", ondelete="cascade"), nullable=False)
+    login = Column(String, ForeignKey(USERS_TABLE + ".username", ondelete="cascade"), nullable=False)
     create_other = Column(Boolean, nullable=False)
     modify_self = Column(Boolean, nullable=False)
     modify_other = Column(Boolean, nullable=False)
     delete_self = Column(Boolean, nullable=False)
     delete_other = Column(Boolean, nullable=False)
 
-    def __repr__(self):
-        return "<User(login='{}', create_other='{}', modify_self='{}', " \
-               "modify_other='{}', delete_self='{}', delete_other='{}')>" \
-            .format(self.login, self.create_other, self.modify_self,
-                    self.modify_other, self.delete_self, self.delete_other)
-
 
 class FixtureList(Base):
     __tablename__ = FL_TABLE
     id = Column(Integer, primary_key=True, nullable=False)
-    login = Column(String, ForeignKey(USERS_TABLE + ".login", ondelete="cascade"), nullable=False)
+    # login = Column(String, ForeignKey(USERS_TABLE + ".login", ondelete="cascade"), nullable=False)
+    login = Column(String, ForeignKey(USERS_TABLE + ".username", ondelete="cascade"), nullable=False)
     winner = Column(Integer, nullable=False)
     attempts = Column(Integer, nullable=False)
     timestamp = Column(Integer, nullable=False)
@@ -170,69 +167,38 @@ class Game:
         r = Game.get_user_by_login(loggedin_user)
         # match = re.search(r"firstname=\'(.*)\', lastname=\'(.*)\', email=\'(.*?)\'", str(r))
         login = loggedin_user
-        firstname = str(r.firstname)
-        lastname = str(r.lastname)
+        firstname = str(r.first_name)
+        lastname = str(r.last_name)
         email = str(r.email)
         user_data = {"login": login, "firstname": firstname, "lastname": lastname, "email": email}
         return user_data
 
     @staticmethod
     def generate_pincode(cap=4):
-        return str(random.randint(10**(cap-1), 10**cap-1))
-
-    @staticmethod
-    def encrypt_password(password):
-        context = CryptContext(
-            schemes=["pbkdf2_sha256"],
-            default="pbkdf2_sha256",
-            pbkdf2_sha256__default_rounds=30000
-        )
-        return context.hash(password)
-
-    @staticmethod
-    def check_password(password, hashed):
-        context = CryptContext(
-            schemes=["pbkdf2_sha256"],
-            default="pbkdf2_sha256",
-            pbkdf2_sha256__default_rounds=30000
-        )
-        try:
-            r = context.verify(password, hashed)
-        except:
-            raise
-        if not r:
-            raise IncorrectPasswordException
+        return str(random.randint(10 ** (cap - 1), 10 ** cap - 1))
 
     # @staticmethod
-    # def send_pincode(email, pincode):
-    #     # return
-    #     # password = Game.base64_decode_("UWV0dTEyMyE=")
-    #     password = Game.base64_decode_("Q3NLMDFFV0J5MVVrcVFtZDF4cTI=")
-    #     email_msg = MIMEMultipart("alternative")
-    #     sender_email = BNC_EMAIL
-    #     receiver_email = email
-    #     # receiver_email = "stayerx@gmail.com"
-    #     email_msg["Subject"] = "Recover your password"
-    #     email_msg["From"] = sender_email
-    #     email_msg["To"] = receiver_email
-    #     text_for_recovering_password = Game.text_for_recovering_password.replace(
-    #         "PINCODE", pincode
+    # def encrypt_password(password):
+    #     context = CryptContext(
+    #         schemes=["pbkdf2_sha256"],
+    #         default="pbkdf2_sha256",
+    #         pbkdf2_sha256__default_rounds=30000
     #     )
-    #     html_for_recovering_password = Game.html_for_recovering_password.replace(
-    #         "PINCODE", pincode
-    #     )
-    #     p1 = MIMEText(text_for_recovering_password, "plain")
-    #     p2 = MIMEText(html_for_recovering_password, "html")
-    #     email_msg.attach(p1)
-    #     email_msg.attach(p2)
-    #     context = ssl.create_default_context()
-    #     try:
+    #     return context.hash(password)
     #
-    #         with smtplib.SMTP_SSL(SMTP_ADDRESS, SSL_PORT, context=context) as srv:
-    #             srv.login(BNC_EMAIL, password)
-    #             srv.sendmail(sender_email, receiver_email, email_msg.as_string())
-    #     except Exception:
+    # @staticmethod
+    # def check_password(password, hashed):
+    #     context = CryptContext(
+    #         schemes=["pbkdf2_sha256"],
+    #         default="pbkdf2_sha256",
+    #         pbkdf2_sha256__default_rounds=30000
+    #     )
+    #     try:
+    #         r = context.verify(password, hashed)
+    #     except:
     #         raise
+    #     if not r:
+    #         raise IncorrectPasswordException
 
     @staticmethod
     def send_email(email, message_type, replace_list):
@@ -461,6 +427,7 @@ class Game:
             session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
             engine = session.bind.engine
             sql_command = f"alter role {login_to_modify} with encrypted password '{password_to_modify}'"
+            Game.sessions[login_to_modify] = None
             Game.get_db_session(login_to_modify, password_to_modify)
             with engine.connect() as con:
                 con.execute(sql_command)
@@ -507,11 +474,11 @@ class Game:
         lastname = lastname.strip()
         email = email.strip().lower()
         user = BnCUsers(
-            login=login,
-            firstname=firstname,
-            lastname=lastname,
+            username=login,
+            first_name=firstname,
+            last_name=lastname,
             email=email,
-            password=Game.encrypt_password(password)
+            password=encrypt_password(password)
         )
         try:
             Game.validate_db_user(db_user, "other")
@@ -543,14 +510,14 @@ class Game:
             Game.validate_db_user(db_user, "other")
             session = Game.get_db_session(db_user, "")
             if only_password:
-                session.query(BnCUsers).filter_by(login=login).update({"login": login,
-                                                                       "password": Game.encrypt_password(password)})
+                session.query(BnCUsers).filter_by(username=login).update({"username": login,
+                                                                          "password": encrypt_password(password)})
             else:
-                session.query(BnCUsers).filter_by(login=login).update({"login": login,
-                                                                       "firstname": firstname,
-                                                                       "lastname": lastname,
-                                                                       "email": email,
-                                                                       "password": Game.encrypt_password(password)})
+                session.query(BnCUsers).filter_by(username=login).update({"username": login,
+                                                                          "first_name": firstname,
+                                                                          "last_name": lastname,
+                                                                          "email": email,
+                                                                          "password": encrypt_password(password)})
             session.commit()
             session.close()
         except Exception:
@@ -568,7 +535,7 @@ class Game:
             session = Game.get_db_session(db_user, "")
             # session.query(Privileges).filter_by(login=login).delete()
             session.query(BnCUsers).filter_by(
-                login=login).delete()  # cascade deleting in DB (from all referenced tables)
+                username=login).delete()  # cascade deleting in DB (from all referenced tables)
             session.commit()
             session.close()
         except Exception as err:
@@ -582,7 +549,7 @@ class Game:
     def get_user_by_login(login):
         try:
             session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
-            r0 = session.query(BnCUsers).filter_by(login=login).first()
+            r0 = session.query(BnCUsers).filter_by(username=login).first()
             session.close()
         except Exception:
             try:
@@ -790,7 +757,7 @@ class Game:
         # match = re.search(r"password=\'(.*)\'", str(r0))
         password_hashed = user_data.password
         try:
-            Game.check_password(password_entered, password_hashed)
+            check_password(password_entered, password_hashed)
         except Exception:
             return
         return True
@@ -1402,21 +1369,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.new_game_window()
 
     def new_game_window(self):
-        # self.reset_to_initials()
         game = self.game
         game.game_initials()
-        # self.my_history_frame = LabelFrame(self, text='History of attempts', labelanchor='n', font='arial 8',
-        #                                    padx='80')
-        # self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
-        # self.go_button['text'] = "OK! Go on!"
-        # self.upper_label['font'] = 'arial 12'
-        # self.upper_label['fg'] = '#0d0'
-        # self.attempts_label['text'] = "Attempts: " + str(game.attempts)
-        # self.my_cows_entry.delete(0, "end")
-        # self.my_bulls_entry.delete(0, "end")
-        # self.my_cows_entry["state"] = "disabled"
-        # self.my_bulls_entry["state"] = "disabled"
-        # self.upper_label['text'] = "Think of a number with " + str(game.capacity) + " unique digits!" #???
         if game.dual_game_enabled:
             self.enable_dual_game()
         else:
@@ -1612,8 +1566,6 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.title("Settings")
         setting_window.geometry(str(setting_window.width) + 'x' + str(setting_window.height))
         setting_window.resizable(0, 0)
-        # self.setting_window_lf0 = LabelFrame(self.setting_window, text='Capacity:', labelanchor='n', font='arial 8', padx=30, pady=4)
-        # self.setting_window_lf0.place(x=10, y=5)
         setting_window.cap_label = Label(setting_window, text='Capacity:', font='arial 8', anchor="e")
         setting_window.cap_label.place(x=10, y=13)
         setting_window.cap_button = Button(setting_window, text='Apply', font='arial 7',
@@ -1626,7 +1578,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.cap_entry.place(x=65, y=13)
         setting_window.cap_entry.delete('0', 'end')
         setting_window.cap_entry.insert('0', game.capacity)
-        setting_window.cap_entry['state'] = 'disabled'
+        # setting_window.cap_entry['state'] = 'disabled'
         setting_window.dual_game_label = Label(setting_window, text='Dual game: ', font='arial 8')
         setting_window.dual_game_label.place(x=10, y=45)
         setting_window.cb_variable = BooleanVar()
@@ -2214,6 +2166,30 @@ def read_phrases():
     except Exception:
         Game.good_mood_phrases = ["Wishing you and me an interesting game!"]
     Game.good_mood_phrases = [e for e in Game.good_mood_phrases if len(e) < 78]
+
+
+def get_salt():
+    random_string_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    salt_entropy = 128
+    char_count = math.ceil(salt_entropy / math.log2(len(random_string_chars)))
+    return "".join(choice(random_string_chars) for i in range(char_count))
+
+
+def encrypt_password(password, salt_str=None, iterations=320000, algorithm="pbkdf2_sha256"):
+    salt_str = salt_str or get_salt()
+    salt = salt_str.encode("utf-8", "strict")
+    password = password.encode("utf-8", "strict")
+    password_hash = hashlib.pbkdf2_hmac(hashlib.sha256().name, password, salt, iterations, None)
+    password_hash = base64.b64encode(password_hash).decode("ascii").strip()
+    return "%s$%d$%s$%s" % (algorithm, iterations, salt_str, password_hash)
+
+
+def check_password(password, password_from_db):
+    algorithm, iterations, salt_str, password_hash = password_from_db.split("$", 3)
+    encrypted_2 = encrypt_password(password, salt_str, iterations)
+    if password_from_db != encrypted_2:
+        raise IncorrectPasswordException
+
 
 
 read_config()
