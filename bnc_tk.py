@@ -17,7 +17,6 @@ import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-from passlib.context import CryptContext
 import yaml
 from yaml.loader import SafeLoader
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, TIMESTAMP
@@ -478,7 +477,11 @@ class Game:
             first_name=firstname,
             last_name=lastname,
             email=email,
-            password=encrypt_password(password)
+            password=encrypt_password(password),
+            is_superuser=True if login==Game.admin_user else False,
+            is_staff=True,
+            is_active=True,
+            date_joined=datetime.fromtimestamp(time()).strftime("%Y.%m.%d %H:%M:%S.%f")
         )
         try:
             Game.validate_db_user(db_user, "other")
@@ -764,6 +767,21 @@ class Game:
         # if not admin_data:
         #     raise NoAdminException
 
+    @staticmethod
+    def record_login_time(login):
+        session = Game.get_db_session(login, "")
+        try:
+            session.query(BnCUsers).filter_by(username=login).update({"last_login":
+                                                                       datetime.fromtimestamp(time()).strftime("%Y.%m.%d %H:%M:%S.%f")})
+            session.commit()
+            session.close()
+        except Exception:
+            try:
+                session.rollback()
+            except:
+                pass
+            raise
+
     def prepare_game(self):
         try:
             self.prepare_db()
@@ -961,6 +979,7 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
             return
         self.game.loggedin_user = login
         Game.get_db_session(login, password)  # remember the session for the logged in user
+        Game.record_login_time(login)
         r_msg = "You've successfully logged in!"
         if admin_needed:
             r_msg += " Please do not forget to create Administrator user (login \"admin\")."

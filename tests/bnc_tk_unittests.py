@@ -1,13 +1,17 @@
-import unittest
-from bnc_tk import Game, FinishedNotOKException, BnCException
+import sys
 from secrets import choice
 from random import random, randint
+sys.path.append("..")
+import unittest
+from bnc_tk import Game, FinishedNotOKException, BnCException
+
 
 CONFIG_PATH = "bnc_config.yml"
 
 
 class TestGame(unittest.TestCase):
     def setUp(self):
+
         self.game = Game()
         self.test_login = "test_user_0"
         self.test_first_name = "TestUser"
