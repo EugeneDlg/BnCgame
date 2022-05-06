@@ -762,7 +762,7 @@ class Game:
         try:
             check_password(password_entered, password_hashed)
         except Exception:
-            return
+            raise
         return True
         # if not admin_data:
         #     raise NoAdminException
@@ -979,7 +979,10 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
             return
         self.game.loggedin_user = login
         Game.get_db_session(login, password)  # remember the session for the logged in user
-        Game.record_login_time(login)
+        try:
+            Game.record_login_time(login)
+        except Exception as err:
+            MessageBox.show_message(self, ErrorMessage(str(err)))
         r_msg = "You've successfully logged in!"
         if admin_needed:
             r_msg += " Please do not forget to create Administrator user (login \"admin\")."
@@ -2205,7 +2208,7 @@ def encrypt_password(password, salt_str=None, iterations=320000, algorithm="pbkd
 
 def check_password(password, password_from_db):
     algorithm, iterations, salt_str, password_hash = password_from_db.split("$", 3)
-    encrypted_2 = encrypt_password(password, salt_str, iterations)
+    encrypted_2 = encrypt_password(password, salt_str, int(iterations))
     if password_from_db != encrypted_2:
         raise IncorrectPasswordException
 
