@@ -768,6 +768,25 @@ class Game:
         #     raise NoAdminException
 
     @staticmethod
+    def authenticate_db_user(login, password):
+        try:
+            session = Game.get_db_session(login, password)
+            r0 = session.query(BnCUsers).filter_by(username=login).first()
+            session.close()
+        except Exception as exc:
+            try:
+                session.rollback()
+            except:
+                pass
+            exc_str = str(exc)
+            match = re.search(r"authenticat", exc_str)
+            if match:
+                raise IncorrectDBPasswordException
+            else:
+                raise
+        return r0
+
+    @staticmethod
     def record_login_time(login):
         session = Game.get_db_session(login, "")
         try:
@@ -963,29 +982,39 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
 
     def authenticate_user_eh(self):
         admin_needed = False
+        incorrect_db_password = False
         login = self.login_entry.get()
         password = self.password_entry.get()
         try:
-            Game.authenticate_user(login, password)
-        except NoAdminException:
-            admin_needed = True
+            Game.authenticate_db_user(login, password)
+        except IncorrectDBPasswordException:
+            incorrect_db_password = True
         except Exception as err:
-            MessageBox.show_message(self, ErrorMessage(str(err)))
+            MessageBox.show_message(self, ErrorMessage(err))
+            return
+        try:
+            Game.authenticate_user(login, password)
+        # except NoAdminException:
+        #     admin_needed = True
+        except Exception as err:
+            MessageBox.show_message(self, ErrorMessage(err))
+            return
+        if incorrect_db_password:
+            MessageBox.show_message(self, ErrorMessage(IncorrectDBPasswordException()))
             return
         try:
             self.game.retrieve_user_privileges(login)
         except Exception as err:
-            MessageBox.show_message(self, ErrorMessage(str(err)))
+            MessageBox.show_message(self, ErrorMessage(err))
             return
         self.game.loggedin_user = login
-        Game.get_db_session(login, password)  # remember the session for the logged in user
         try:
             Game.record_login_time(login)
         except Exception as err:
-            MessageBox.show_message(self, ErrorMessage(str(err)))
+            MessageBox.show_message(self, ErrorMessage(err))
         r_msg = "You've successfully logged in!"
-        if admin_needed:
-            r_msg += " Please do not forget to create Administrator user (login \"admin\")."
+        # if admin_needed:
+        #     r_msg += " Please do not forget to create Administrator user (login \"admin\")."
         MessageBox.show_message(self, InfoMessage(r_msg))
 
     def open_restore_password_window(self):
@@ -2131,6 +2160,14 @@ class IncorrectPasswordException(Exception):
 
     def __str__(self):
         return "Incorrect Password!"
+
+
+class IncorrectDBPasswordException(Exception):
+    def __repr__(self):
+        return "Incorrect DB password for your user! Please ask DB administrator for help."
+
+    def __str__(self):
+        return "Incorrect DB password for your user! Please ask DB administrator for help."
 
 
 class LabelPics:
