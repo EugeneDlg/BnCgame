@@ -787,6 +787,10 @@ class Game:
         return r0
 
     @staticmethod
+    def logout(login):
+        Game.sessions[login] = None
+
+    @staticmethod
     def record_login_time(login):
         session = Game.get_db_session(login, "")
         try:
@@ -1072,7 +1076,7 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
             Game.send_email(email, "pincode", replace_list)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
-        recovery_window.close()
+        # recovery_window.close()
         recovery_window.game = self.game
 
 
@@ -2021,7 +2025,7 @@ class MessageBox:
                     parent_window.proceed_deleting(parent_window.login_for_deleting)
                     parent_window.main_win.close()
             if is_logout:
-                run()
+                run(parent_window)
 
         text, width, height = MessageBox.format_text(msg.text.strip())
         msgbox = Toplevel(parent_window)
@@ -2176,7 +2180,10 @@ class LabelPics:
     warning_pic = None
 
 
-def run():
+def run(previous_win=None):
+    if previous_win:
+        Game.logout(previous_win.game.loggedin_user)
+        del previous_win
     game = Game()
     main_win = MainWin()
     main_win.game = game
