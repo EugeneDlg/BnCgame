@@ -26,6 +26,8 @@ from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
 from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
+from bnc_lib import get_new_guess_proposal, think_of_number_for_you
+
 CONFIG_PATH = "bnc_config.yml"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
 DB_NAME = "bnc"
@@ -237,14 +239,6 @@ class Game:
         if correct_pincode != entered_pincode:
             raise BnCException("Incorrect pincode")
 
-    def get_new_guess_proposal(self):
-        new_guess_proposal = ''
-        while len(new_guess_proposal) < self.capacity:
-            c = str(random.randint(0, 9))
-            if (not (c in self.guess_proposal)) and (not (c in new_guess_proposal)):
-                new_guess_proposal += c
-        self.guess_proposal = new_guess_proposal
-
     # @staticmethod
     # def populate(interim_str, items_for_templates):
     #     guess_set = set()
@@ -329,7 +323,7 @@ class Game:
                     raise FinishedNotOKException
                 self.guess_proposal = choice(tuple(self.total_set))
             else:
-                self.get_new_guess_proposal()
+                self.guess_proposal = get_new_guess_proposal(self.capacity, self.guess_proposal)
             self.attempts += 1
             return False
         templates_set = self.get_templates()
@@ -400,9 +394,6 @@ class Game:
             return True
         else:
             return False
-
-    def think_of_number_for_you(self):
-        self.my_string_for_you = "".join(choice(list(permutations("0123456789", self.capacity))))
 
     @staticmethod
     def create_db_user(login_to_create, password_to_create):
@@ -894,8 +885,8 @@ class Game:
         for row in fl_data_from_db:
             login = str(row.login)
             user_data = self.get_user_by_login(login)
-            first_name = str(user_data.firstname)
-            last_name = str(user_data.lastname)
+            first_name = str(user_data.first_name)
+            last_name = str(user_data.last_name)
             if int(row.winner) == 1:
                 winner = "Me"
             elif int(row.winner) == 2:
@@ -1327,8 +1318,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         # self.status_label["text"] = f"Attempts: {str(self.game.attempts)}      Duration 00:00:{self.count}"
 
         if game.attempts == 0:
-            game.get_new_guess_proposal()
-            game.think_of_number_for_you()
+            game.guess_proposal = get_new_guess_proposal(game.capacity, game.guess_proposal)
+            game.my_string_for_you = think_of_number_for_you(game.capacity)
             game.attempts += 1
             game.start_timestamp = time()
             game.game_started = True
@@ -1430,7 +1421,7 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.enable_dual_game()
         else:
             self.enable_mono_game()
-        game.think_of_number_for_you()  # ???
+        game.my_string_for_you = think_of_number_for_you(game.capacity)  # ???
 
     @staticmethod
     def disable_event():
@@ -2256,6 +2247,18 @@ def check_password(password, password_from_db):
     if password_from_db != encrypted_2:
         raise IncorrectPasswordException
 
+
+# def get_new_guess_proposal(guess_proposal: str, capacity: int) -> str:
+#     new_guess_proposal = ''
+#     while len(new_guess_proposal) < capacity:
+#         c = str(random.randint(0, 9))
+#         if (not (c in guess_proposal)) and (not (c in new_guess_proposal)):
+#             new_guess_proposal += c
+#     return new_guess_proposal
+#
+#
+# def think_of_number_for_you(capacity):
+#     return "".join(choice(list(permutations("0123456789", capacity))))
 
 
 read_config()
