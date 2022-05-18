@@ -27,6 +27,8 @@ from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
 from bnc_lib import get_new_guess_proposal, think_of_number_for_you
+from bnc_lib import FinishedNotOKException, InvalidLoginException
+from bnc_lib import IncorrectPasswordException, IncorrectDBPasswordException
 
 CONFIG_PATH = "bnc_config.yml"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
@@ -2119,50 +2121,6 @@ class BnCException(Exception):
 
     def __str__(self):
         return "{}".format(self.msg)
-
-
-class UserNotFoundException(Exception):
-    pass
-
-
-class InvalidLoginException(Exception):
-    def __init__(self, a):
-        super().__init__()
-        self.msg = "User with this login doesn't exist!" if a else "User with this login already exists!"
-
-    def __repr__(self):
-        return "{}".format(self.msg)
-
-    def __str__(self):
-        return "{}".format(self.msg)
-
-
-class FinishedOKException(Exception):
-    pass
-
-
-class FinishedNotOKException(Exception):
-    pass
-
-
-class NoAdminException(Exception):
-    pass
-
-
-class IncorrectPasswordException(Exception):
-    def __repr__(self):
-        return "Incorrect Password!"
-
-    def __str__(self):
-        return "Incorrect Password!"
-
-
-class IncorrectDBPasswordException(Exception):
-    def __repr__(self):
-        return "Incorrect DB password for your user! Please ask DB administrator for help."
-
-    def __str__(self):
-        return "Incorrect DB password for your user! Please ask DB administrator for help."
 
 
 class LabelPics:
