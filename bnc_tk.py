@@ -8,7 +8,7 @@ from itertools import permutations
 from secrets import choice
 from datetime import datetime
 from time import time
-from tkinter import Label, Button, Entry, Frame, PhotoImage, LabelFrame, Menu, Checkbutton
+from tkinter import Label, Button, Entry, Frame, PhotoImage, LabelFrame, Menu, Checkbutton, DISABLED, NORMAL
 from tkinter import SUNKEN, BOTTOM, E, W, N, S, X, Y
 from tkinter import Toplevel, ttk, Tk
 from tkinter import StringVar, BooleanVar
@@ -26,7 +26,7 @@ from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
 from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
-from bnc_lib import get_new_guess_proposal, think_of_number_for_you
+from bnc_lib import get_my_first_guess, think_of_number_for_you, get_templates, get_items_for_templates
 from bnc_lib import FinishedNotOKException, InvalidLoginException
 from bnc_lib import IncorrectPasswordException, IncorrectDBPasswordException
 
@@ -127,44 +127,6 @@ class Game:
             iteration -= 1
         return total
 
-    def get_templates(self):
-        cows = self.my_cows
-        bulls = self.my_bulls
-        current_guess = self.guess_proposal
-        capacity = self.capacity
-        only_bulls_set = set()
-        one_cow_set = set()
-        total = set()
-        if cows == bulls:
-            bulls_permut = set(map(tuple, map(sorted, permutations(range(len(current_guess)), cows))))
-            for i0 in bulls_permut:
-                temp = ["V" for _ in range(capacity)]
-                for i1 in i0:
-                    temp[i1] = current_guess[i1]
-                only_bulls_set.add(tuple(temp))
-            total = only_bulls_set.copy()
-        else:
-            for i0 in range(capacity):
-                temp = ["V" for _ in range(capacity)]
-                for i1, c1 in enumerate(current_guess):
-                    if i1 == i0:
-                        continue
-                    temp[i0] = c1
-                    one_cow_set.add(tuple(temp))
-            if cows - bulls == 1:
-                total = one_cow_set.copy()
-            else:
-                total = Game.overlap_sets(one_cow_set, one_cow_set, cows - bulls - 1)
-            if bulls > 0:
-                bulls_permut = set(map(tuple, map(sorted, permutations(range(len(current_guess)), bulls))))
-                for i0 in bulls_permut:
-                    temp = ["V" for _ in range(capacity)]
-                    for i1 in i0:
-                        temp[i1] = current_guess[i1]
-                    only_bulls_set.add(tuple(temp))
-                total = Game.overlap_sets(only_bulls_set, total, 1)
-        return total
-
     @staticmethod
     def load_logged_user_info(loggedin_user):
         r = Game.get_user_by_login(loggedin_user)
@@ -259,19 +221,7 @@ class Game:
     #             guess_set.add(a[:])
     #     return guess_set
 
-    def get_items_for_templates(self):
-        items_for_templates = []
-        capacity = self.capacity
-        my_cows = self.my_cows
-        init_rest_str = self.available_digits_str
-        for a in self.guess_proposal:
-            init_rest_str = init_rest_str.replace(a, '')
-        if capacity - my_cows > 0:
-            for l in permutations(init_rest_str, capacity - my_cows):
-                items_for_templates.append(''.join(map(str, l)))
-        return items_for_templates
-
-    def my_guess(self):
+    def generate_my_guess(self):
         """
         The method figures out my next guess proposal based on number
         of cows and bulls that were given by you (user) for my current guess proposal.
@@ -308,31 +258,31 @@ class Game:
         capacity = self.capacity
         my_cows = self.my_cows
         my_bulls = self.my_bulls
-        self.my_history_list.append((self.guess_proposal, my_cows, my_bulls))
+        self.my_history_list.append((self.my_guess, my_cows, my_bulls))
         if my_cows == capacity and my_bulls == capacity:
             # raise FinishedOKException
             return True
         if my_cows == 0 and my_bulls == 0:
-            for a in self.guess_proposal:
+            for a in self.my_guess:
                 self.available_digits_str = self.available_digits_str.replace(a, '')
             if len(self.total_set) > 0:
                 for c in list(self.total_set):
-                    for cc in self.guess_proposal:
+                    for cc in self.my_guess:
                         if cc in c:
                             self.total_set.remove(c)
                             break
                 if len(self.total_set) == 0:
                     raise FinishedNotOKException
-                self.guess_proposal = choice(tuple(self.total_set))
+                self.my_guess = choice(tuple(self.total_set))
             else:
-                self.guess_proposal = get_new_guess_proposal(self.capacity, self.guess_proposal)
+                self.my_guess = get_my_first_guess(self.capacity, self.my_guess)
             self.attempts += 1
             return False
-        templates_set = self.get_templates()
+        templates_set = get_templates(self.my_cows, self.my_bulls, self.my_guess, self.capacity)
         if my_cows == capacity:
             lst = ["".join(x) for x in templates_set]
         else:
-            items_for_templates = self.get_items_for_templates()
+            items_for_templates = get_items_for_templates(self.my_cows, self.capacity, self.my_guess)
             lst = [populate_template(a, b) for a in templates_set for b in items_for_templates]
         self.current_set = set(lst)
         if len(self.total_set) > 0:
@@ -342,18 +292,18 @@ class Game:
         # self.write_set()
         if len(self.total_set) == 0:
             raise FinishedNotOKException
-        self.guess_proposal = choice(tuple(self.total_set))
+        self.my_guess = choice(tuple(self.total_set))
         self.attempts += 1
         self.current_set.clear()
         return False
 
     def write_set(self):
-        guess_proposal = str(self.guess_proposal)
+        my_guess = str(self.my_guess)
         cows = str(self.my_cows)
         bulls = str(self.my_bulls)
-        path = "dump_set_" + guess_proposal + "_" + cows + "_" + bulls
+        path = "dump_set_" + my_guess + "_" + cows + "_" + bulls
         with open(path, "w") as f:
-            f.write(guess_proposal + '\n')
+            f.write(my_guess + '\n')
             f.write(cows + '\n')
             f.write(bulls + '\n')
             for i in self.total_set:
@@ -841,7 +791,7 @@ class Game:
         self.your_cows = None
         self.your_bulls = None
         self.available_digits_str = '0123456789'
-        self.guess_proposal = ''
+        self.my_guess = ''
         self.attempts = 0
         self.game_started = False
         self.start_timestamp = None
@@ -1320,7 +1270,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         # self.status_label["text"] = f"Attempts: {str(self.game.attempts)}      Duration 00:00:{self.count}"
 
         if game.attempts == 0:
-            game.guess_proposal = get_new_guess_proposal(game.capacity, game.guess_proposal)
+            game.my_guess = get_my_first_guess(game.capacity, game.my_guess)
             game.my_string_for_you = think_of_number_for_you(game.capacity)
             game.attempts += 1
             game.start_timestamp = time()
@@ -1351,7 +1301,7 @@ class MainWin(Tk, AdditionalWindowMethods):
 
         if game.your_string_for_automation_game:
             game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
-                game.your_string_for_automation_game, game.guess_proposal)
+                game.your_string_for_automation_game, game.my_guess)
         else:
             my_cows_entered = self.my_cows_entry.get().strip()
             my_bulls_entered = self.my_bulls_entry.get().strip()
@@ -1373,7 +1323,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         else:
             your_result = False
         try:
-            my_result = game.my_guess()
+            my_result = game.generate_my_guess()
         except FinishedNotOKException:
             self.finish_game_on_main_window(0)
             return
@@ -1476,7 +1426,7 @@ class MainWin(Tk, AdditionalWindowMethods):
     def change_data_on_window_mono_game(self):
         self.my_cows_entry.delete(0, "end")
         self.my_bulls_entry.delete(0, "end")
-        self.upper_label['text'] = 'I guess your number is: ' + self.game.guess_proposal
+        self.upper_label['text'] = 'I guess your number is: ' + self.game.my_guess
         self.upper_label['fg'] = '#000'
         self.go_button["text"] = "OK!"
         # self.attempts_label['text'] = 'Attempts: ' + str(self.game.attempts)
@@ -1503,7 +1453,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.my_cows_entry.delete(0, "end")
         self.my_bulls_entry.delete(0, "end")
         self.your_guess_entry.delete(0, "end")
-        self.my_upper_label['text'] = 'I guess your number is: ' + self.game.guess_proposal
+        self.my_upper_label['text'] = 'I guess your number is: ' + self.game.my_guess
         self.upper_label['fg'] = '#000'
         # self.attempts_label['text'] = 'Attempts: ' + str(self.game.attempts)
         # self.status_label["text"] = f"Attempts: {str(self.game.attempts)}      Duration 00:00:{self.count}"
@@ -1673,6 +1623,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
         self.resizable(0, 0)
         self.title("Bulls and Cows Game")
+        self.filemenu.entryconfig("Fixture List", state=DISABLED)
         self.upper_label = Label(self, text="Think of a number with " + str(game.capacity) + " unique digits!",
                                  font='arial 12')
         self.upper_label.bind("<Double-Button-1>", self.mouse_function_hide)
@@ -1710,6 +1661,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.geometry(f'{self.initial_main_width}x{self.initial_main_height}')
         self.resizable(0, 0)
         self.title("Bulls and Cows Game")
+        self.filemenu.entryconfig("Fixture List", state=NORMAL)
         self.upper_label = Label(self, text="Think of a number with "
                                             + str(game.capacity) + " unique digits!\n"
                                                                    "And I will think of a number to guess for you!",
@@ -2136,11 +2088,11 @@ def run(previous_win=None):
     game = Game()
     main_win = MainWin()
     main_win.game = game
+    main_win.show_main_window_menu()
     if game.dual_game_enabled:
         main_win.enable_dual_game()
     else:
         main_win.enable_mono_game()
-    main_win.show_main_window_menu()
     main_win.open_login_window()
     main_win.mainloop()
 
@@ -2204,19 +2156,6 @@ def check_password(password, password_from_db):
     encrypted_2 = encrypt_password(password, salt_str, int(iterations))
     if password_from_db != encrypted_2:
         raise IncorrectPasswordException
-
-
-# def get_new_guess_proposal(guess_proposal: str, capacity: int) -> str:
-#     new_guess_proposal = ''
-#     while len(new_guess_proposal) < capacity:
-#         c = str(random.randint(0, 9))
-#         if (not (c in guess_proposal)) and (not (c in new_guess_proposal)):
-#             new_guess_proposal += c
-#     return new_guess_proposal
-#
-#
-# def think_of_number_for_you(capacity):
-#     return "".join(choice(list(permutations("0123456789", capacity))))
 
 
 read_config()
