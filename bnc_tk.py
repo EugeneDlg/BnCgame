@@ -26,8 +26,9 @@ from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
 from sqlalchemy.orm.session import close_all_sessions
 from sqlalchemy.ext.declarative import declarative_base
 
-from bnc_lib import get_my_first_guess, think_of_number_for_you, get_templates, get_items_for_templates
-from bnc_lib import FinishedNotOKException, InvalidLoginException
+from bnc_lib import get_my_first_guess, think_of_number_for_you, make_my_guess, make_your_guess, calc_bulls_and_cows
+from bnc_lib import validate_cows_and_bulls, validate_your_guess
+from bnc_lib import BnCException, FinishedNotOKException, InvalidLoginException
 from bnc_lib import IncorrectPasswordException, IncorrectDBPasswordException
 
 CONFIG_PATH = "bnc_config.yml"
@@ -93,7 +94,6 @@ class Game:
         self.my_history_list = list()
         self.your_history_list = list()
         self.total_set = set()
-        self.current_set = set()
         self.new_game_requested = False
         self.loggedin_user = None
         self.dual_game_enabled = True
@@ -221,82 +221,6 @@ class Game:
     #             guess_set.add(a[:])
     #     return guess_set
 
-    def generate_my_guess(self):
-        """
-        The method figures out my next guess proposal based on number
-        of cows and bulls that were given by you (user) for my current guess proposal.
-        :param my_cows_raw: Number of cows entered by you
-                    (an overall number of digits that I (script)
-                    managed to guess from the current guess proposal)
-        :param my_bulls_raw: Number of bulls entered by you
-                    (a number of digits of the correct positions that I (script)
-                    managed to guess from the current guess proposal)
-        :return: - True if the original number is guessed my me (by the script), i.e.
-                        my_cows == my_bulls == capacity. So I am a winner.
-                 - False if everything is OK and so we can proceed the game to the next iteration.
-                        I calculate the next guess proposal based on my_cows and my_bulls.
-                 - FinishedNotOKException raised if you have misled me during previous game iteration
-                 by providing of wrong cows and/or bulls. In this case game
-                 has become inconsistent, so I cannot guess your number and so I have to finish the game.
-        """
-
-        def populate_template(a, b):
-            """
-            The method replace a vacant place (letter 'V') in 'a' agrument (a template) with a digit from
-            b argument consequently. So it makes one possible guess number for guess numbers set.
-            :param a: a template with 'V's and digits from the guess number
-            :param b: digits which will be put instead of 'V'
-            :return: one possible guess number for guess numbers set
-            """
-            list0 = list(a)
-            list1 = []
-            list1.extend(b)
-            while list0.count('V'):
-                list0[list0.index('V')] = list1.pop()
-            return "".join(list0)
-
-        capacity = self.capacity
-        my_cows = self.my_cows
-        my_bulls = self.my_bulls
-        self.my_history_list.append((self.my_guess, my_cows, my_bulls))
-        if my_cows == capacity and my_bulls == capacity:
-            # raise FinishedOKException
-            return True
-        if my_cows == 0 and my_bulls == 0:
-            for a in self.my_guess:
-                self.available_digits_str = self.available_digits_str.replace(a, '')
-            if len(self.total_set) > 0:
-                for c in list(self.total_set):
-                    for cc in self.my_guess:
-                        if cc in c:
-                            self.total_set.remove(c)
-                            break
-                if len(self.total_set) == 0:
-                    raise FinishedNotOKException
-                self.my_guess = choice(tuple(self.total_set))
-            else:
-                self.my_guess = get_my_first_guess(self.capacity, self.my_guess)
-            self.attempts += 1
-            return False
-        templates_set = get_templates(self.my_cows, self.my_bulls, self.my_guess, self.capacity)
-        if my_cows == capacity:
-            lst = ["".join(x) for x in templates_set]
-        else:
-            items_for_templates = get_items_for_templates(self.my_cows, self.capacity, self.my_guess)
-            lst = [populate_template(a, b) for a in templates_set for b in items_for_templates]
-        self.current_set = set(lst)
-        if len(self.total_set) > 0:
-            self.total_set = self.total_set & self.current_set
-        else:
-            self.total_set = self.current_set.copy()
-        # self.write_set()
-        if len(self.total_set) == 0:
-            raise FinishedNotOKException
-        self.my_guess = choice(tuple(self.total_set))
-        self.attempts += 1
-        self.current_set.clear()
-        return False
-
     def write_set(self):
         my_guess = str(self.my_guess)
         cows = str(self.my_cows)
@@ -309,43 +233,16 @@ class Game:
             for i in self.total_set:
                 f.write(str("".join(i)) + '\n')
 
-    @staticmethod
-    def calc_bulls_and_cows(true_number: str, guess_number: str):
-        """
-        The method calculates a number of cows and a number of bulls based on the true number and a guess number
-        :param true_number: string
-        :param guess_number: string
-        :return: tuple (cows, bulls)
-        """
-        cows = bulls = 0
-        for i0, c0 in enumerate(true_number):
-            for i1, c1 in enumerate(guess_number):
-                if c0 == c1:
-                    cows += 1
-                    if i0 == i1:
-                        bulls += 1
-                    break
-        return (cows, bulls)
+    # @staticmethod
+    # def validate_cows_and_bulls(cows_raw, bulls_raw, capacity):
+    #     if not (cows_raw.isdigit() and bulls_raw.isdigit()):
+    #         raise BnCException("Number of Cows and Bulls must be a digit")
+    #     cows = int(cows_raw)
+    #     bulls = int(bulls_raw)
+    #     if (cows == capacity and bulls == capacity - 1) or (
+    #             bulls > cows) or bulls > capacity or cows > capacity:
+    #         raise BnCException("Erroneous input combination! Try again!")
 
-    @staticmethod
-    def validate_cows_and_bulls(cows_raw, bulls_raw, capacity):
-        if not (cows_raw.isdigit() and bulls_raw.isdigit()):
-            raise BnCException("Number of Cows and Bulls must be a digit")
-        cows = int(cows_raw)
-        bulls = int(bulls_raw)
-        if (cows == capacity and bulls == capacity - 1) or (
-                bulls > cows) or bulls > capacity or cows > capacity:
-            raise BnCException("Erroneous input combination! Try again!")
-
-    def your_guess(self, your_guess_string):
-        if self.attempts < 1:
-            return False
-        self.your_cows, self.your_bulls = self.calc_bulls_and_cows(self.my_string_for_you, your_guess_string)
-        self.your_history_list.append((your_guess_string, self.your_cows, self.your_bulls))
-        if self.your_cows == self.capacity and self.your_bulls == self.capacity:
-            return True
-        else:
-            return False
 
     @staticmethod
     def create_db_user(login_to_create, password_to_create):
@@ -772,16 +669,9 @@ class Game:
     def base64_decode_(encoded_string):
         return base64.b64decode(encoded_string.encode("ascii")).decode("ascii")
 
-    @staticmethod
-    def validate_your_string(capacity, input_string):
-        if not input_string.isdigit() or len(input_string) != capacity or len(set(list(input_string))) != len(
-                list(input_string)):
-            raise BnCException("You entered an invalid string trying to guess my number!")
-        return True
 
     def game_initials(self):
         self.total_set.clear()
-        self.current_set.clear()
         self.my_history_list.clear()
         self.your_history_list.clear()
         self.my_cows = None
@@ -1300,35 +1190,35 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.update_status_label()
 
         if game.your_string_for_automation_game:
-            game.my_cows, game.my_bulls = game.calc_bulls_and_cows(
+            game.my_cows, game.my_bulls = calc_bulls_and_cows(
                 game.your_string_for_automation_game, game.my_guess)
         else:
             my_cows_entered = self.my_cows_entry.get().strip()
             my_bulls_entered = self.my_bulls_entry.get().strip()
             try:
-                game.validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
+                validate_cows_and_bulls(my_cows_entered, my_bulls_entered, game.capacity)
             except Exception as exc:
-                MessageBox.show_message(self, ErrorMessage(str(exc)))
+                MessageBox.show_message(self, ErrorMessage(exc))
                 return
             game.my_cows = int(my_cows_entered)
             game.my_bulls = int(my_bulls_entered)
         if game.dual_game_enabled and game.attempts > 0:
             your_guess_entered = self.your_guess_entry.get().strip()
             try:
-                game.validate_your_string(game.capacity, your_guess_entered)
-                your_result = game.your_guess(your_guess_entered)
+                validate_your_guess(game.capacity, your_guess_entered)
+                your_result = make_your_guess(game, your_guess_entered)
             except Exception as exc:
-                MessageBox.show_message(self, ErrorMessage(str(exc)))
+                MessageBox.show_message(self, ErrorMessage(exc))
                 return
         else:
             your_result = False
         try:
-            my_result = game.generate_my_guess()
+            my_result = make_my_guess(game)
         except FinishedNotOKException:
             self.finish_game_on_main_window(0)
             return
         except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(str(exc)))
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
         if my_result and not your_result:
             self.finish_game_on_main_window(1)
@@ -1603,7 +1493,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         try:
             fl_data = game.get_data_for_fixture_table()
         except Exception as exc:
-            MessageBox.show_message(self, ErrorMessage(str(exc)))
+            MessageBox.show_message(self, ErrorMessage(exc))
             return
         fixture_list_window = FixtureListTreeview(self, fl_data)
         button = Button(fixture_list_window, text="Close", width=10,
@@ -2033,7 +1923,16 @@ class ExitMessage:
 
 class BaseMessage:
     def __init__(self, msg):
-        self.text = str(msg)
+        if isinstance(msg, Exception):
+            if isinstance(msg.msg, dict):
+                text = ''
+                for e in msg.msg.values():
+                    text += e + " "
+                self.text = text
+            else:
+                self.text = str(msg)
+        else:
+            self.text = str(msg)
 
 
 class InfoMessage(BaseMessage):
@@ -2061,18 +1960,6 @@ class ErrorMessage(BaseMessage):
         super().__init__(msg)
         self.title = ErrorMessage.title
         self.label_pic = LabelPics.error_pic
-
-
-class BnCException(Exception):
-    def __init__(self, msg):
-        super().__init__()
-        self.msg = msg
-
-    def __repr__(self):
-        return "{}".format(self.msg)
-
-    def __str__(self):
-        return "{}".format(self.msg)
 
 
 class LabelPics:

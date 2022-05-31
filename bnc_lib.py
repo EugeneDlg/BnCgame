@@ -16,11 +16,11 @@ def think_of_number_for_you(capacity):
     return "".join(choice(list(permutations("0123456789", capacity))))
 
 
-def generate_my_guess(game_info):
+def make_my_guess(game):
     """
     The method figures out my next guess proposal based on number
     of cows and bulls that were given by you (user) for my current guess proposal.
-    :param game_info
+    :param game
     :return: - True if the original number is guessed my me (by the script), i.e.
                     my_cows == my_bulls == capacity. So I am a winner.
              - False if everything is OK and so we can proceed the game to the next iteration.
@@ -45,48 +45,44 @@ def generate_my_guess(game_info):
             list0[list0.index('V')] = list1.pop()
         return "".join(list0)
 
-    capacity = game_info.capacity
-    my_cows = game_info.my_cows
-    my_bulls = game_info.my_bulls
-    game_info.my_history_list.append((game_info.my_guess, my_cows, my_bulls))
-    print(isinstance(capacity, int))
-    print(isinstance(my_bulls, int))
-    print(isinstance(game_info.my_history_list, list))
-    return
+    capacity = game.capacity
+    my_cows = game.my_cows
+    my_bulls = game.my_bulls
+    my_guess = game.my_guess
+    game.my_history_list.append((my_guess, str(my_cows), str(my_bulls)))
     if my_cows == capacity and my_bulls == capacity:
         return True
     if my_cows == 0 and my_bulls == 0:
-        for a in game_info.my_guess:
-            game_info.available_digits_str = game_info.available_digits_str.replace(a, '')
-        if len(game_info.total_set) > 0:
-            for c in list(game_info.total_set):
-                for cc in game_info.my_guess:
+        for a in my_guess:
+            game.available_digits_str = game.available_digits_str.replace(a, '')
+        if len(game.total_set) > 0:
+            for c in list(game.total_set):
+                for cc in game.my_guess:
                     if cc in c:
-                        game_info.total_set.remove(c)
+                        game.total_set.remove(c)
                         break
-            if len(game_info.total_set) == 0:
+            if len(game.total_set) == 0:
                 raise FinishedNotOKException
-            game_info.my_guess = choice(tuple(game_info.total_set))
+            game.my_guess = choice(tuple(game.total_set))
         else:
-            game_info.my_guess = get_my_first_guess(game_info.capacity, game_info.my_guess)
-        game_info.attempts += 1
+            game.my_guess = get_my_first_guess(capacity, my_guess)
+        game.attempts += 1
         return False
-    templates_set = game_info.get_templates()
+    templates_set = get_templates(my_cows, my_bulls, my_guess, capacity)
     if my_cows == capacity:
         lst = ["".join(x) for x in templates_set]
     else:
-        items_for_templates = game_info.get_items_for_templates()
+        items_for_templates = get_items_for_templates(my_cows, my_guess, capacity, game.available_digits_str)
         lst = [populate_template(a, b) for a in templates_set for b in items_for_templates]
     current_set = set(lst)
-    if len(game_info.total_set) > 0:
-        game_info.total_set = game_info.total_set & current_set
+    if len(game.total_set) > 0:
+        game.total_set = game.total_set & current_set
     else:
-        game_info.total_set = current_set.copy()
-    # game_info.write_set()
-    if len(game_info.total_set) == 0:
+        game.total_set = current_set.copy()
+    if len(game.total_set) == 0:
         raise FinishedNotOKException
-    game_info.my_guess = choice(tuple(game_info.total_set))
-    game_info.attempts += 1
+    game.my_guess = choice(tuple(game.total_set))
+    game.attempts += 1
     return False
 
 
@@ -116,7 +112,7 @@ def overlap_sets(set0, set1, iteration):
     return total
 
 
-def get_items_for_templates(cows, capacity, guess, init_rest_str="0123456789"):
+def get_items_for_templates(cows, guess, capacity, init_rest_str="0123456789"):
     items_for_templates = []
     for a in guess:
         init_rest_str = init_rest_str.replace(a, '')
@@ -159,6 +155,70 @@ def get_templates(cows, bulls, current_guess, capacity):
                 only_bulls_set.add(tuple(temp))
             total = overlap_sets(only_bulls_set, total, 1)
     return total
+
+
+def validate_cows_and_bulls(cows_raw, bulls_raw, capacity):
+    errors_dict = {}
+    if not cows_raw.isdigit():
+        errors_dict["my_cows"] = "Number of cows must be a digit."
+    if not bulls_raw.isdigit():
+        errors_dict["my_cows"] = "Number of bulls must be a digit."
+    if len(errors_dict) > 0:
+        raise BnCException(errors_dict)
+    cows = int(cows_raw)
+    bulls = int(bulls_raw)
+    if cows > capacity:
+        errors_dict["my_cows"] = "Number of cows cannot be more than the capacity (" + str(capacity) + ")."
+    if bulls > capacity:
+        errors_dict["my_bulls"] = "Number of bulls cannot be more than the capacity (" + str(capacity) + ")."
+    if len(errors_dict) > 0:
+        raise BnCException(errors_dict)
+    if bulls > cows:
+        errors_dict["my_bulls"] = "Number of bulls cannot be more than the number of cows."
+    if cows == capacity and bulls == capacity - 1:
+        errors_dict["my_cows"] = "Erroneous combination of cows and bulls! Try again!"
+        errors_dict["my_bulls"] = ""
+    if len(errors_dict) > 0:
+        raise BnCException(errors_dict)
+
+
+def validate_your_guess(capacity, input_string):
+    errors_dict = {}
+    if not input_string.isdigit() or len(input_string) != capacity or len(set(list(input_string))) != len(
+            list(input_string)):
+        errors_dict["your_guess"] = "Incorrect format of the guess."
+    if len(errors_dict) > 0:
+        raise BnCException(errors_dict)
+    return True
+
+
+def make_your_guess(game, your_guess_string):
+    if game.attempts < 1:
+        return False
+    game.your_cows, game.your_bulls = calc_bulls_and_cows(game.my_number, your_guess_string)
+    game.your_history_list.append((your_guess_string, str(game.your_cows), str(game.your_bulls)))
+    if game.your_cows == game.capacity and game.your_bulls == game.capacity:
+        return True
+    else:
+        return False
+
+
+def calc_bulls_and_cows(true_number: str, guess_number: str):
+    """
+    The method calculates a number of cows and a number of bulls based on the true number and a guess number
+    :param true_number: string
+    :param guess_number: string
+    :return: tuple (cows, bulls)
+    """
+    cows = bulls = 0
+    for i0, c0 in enumerate(true_number):
+        for i1, c1 in enumerate(guess_number):
+            if c0 == c1:
+                cows += 1
+                if i0 == i1:
+                    bulls += 1
+                break
+    return cows, bulls
 
 
 class UserNotFoundException(Exception):
@@ -205,4 +265,14 @@ class IncorrectDBPasswordException(Exception):
         return "Incorrect DB password for your user! Please ask DB administrator for help."
 
 
+class BnCException(Exception):
+    def __init__(self, msg):
+        super().__init__()
+        self.msg = msg
+
+    def __repr__(self):
+        return "{}".format(self.msg)
+
+    def __str__(self):
+        return "{}".format(self.msg)
 
