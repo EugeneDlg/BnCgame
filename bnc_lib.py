@@ -196,7 +196,7 @@ def make_your_guess(game, your_guess_string):
     if game.attempts < 1:
         return False
     game.your_cows, game.your_bulls = calc_bulls_and_cows(game.my_number, your_guess_string)
-    game.your_history_list.append((your_guess_string, str(game.your_cows), str(game.your_bulls)))
+    game.your_history_list.append((str(your_guess_string), str(game.your_cows), str(game.your_bulls)))
     if game.your_cows == game.capacity and game.your_bulls == game.capacity:
         return True
     else:
