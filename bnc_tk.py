@@ -75,10 +75,10 @@ class FixtureList(Base):
     __tablename__ = FL_TABLE
     id = Column(Integer, primary_key=True, nullable=False)
     # login = Column(String, ForeignKey(USERS_TABLE + ".login", ondelete="cascade"), nullable=False)
-    login = Column(String, ForeignKey(USERS_TABLE + ".username", ondelete="cascade"), nullable=False)
+    username_id = Column(String, ForeignKey(USERS_TABLE + ".username", ondelete="cascade"), nullable=False)
     winner = Column(Integer, nullable=False)
     attempts = Column(Integer, nullable=False)
-    timestamp = Column(Integer, nullable=False)
+    timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
     duration = Column(Integer, nullable=False)
 
 
@@ -677,7 +677,7 @@ class Game:
         self.my_cows = None
         self.my_bulls = None
         self.your_string_for_automation_game = None
-        self.my_string_for_you = None
+        self.my_number = None
         self.your_cows = None
         self.your_bulls = None
         self.available_digits_str = '0123456789'
@@ -690,11 +690,11 @@ class Game:
     def write_fl_to_db(self, result_code):
 
         fl_item = FixtureList(
-            login=self.loggedin_user,
+            username_id=self.loggedin_user,
             winner=result_code,  # continue from this
             attempts=self.attempts,
             timestamp=self.start_timestamp,
-            duration=math.ceil(self.finish_timestamp - self.start_timestamp) / 60
+            duration=math.ceil((self.finish_timestamp - self.start_timestamp) / 60)
         )
         try:
             session = Game.get_db_session(self.loggedin_user, "")
@@ -1161,7 +1161,7 @@ class MainWin(Tk, AdditionalWindowMethods):
 
         if game.attempts == 0:
             game.my_guess = get_my_first_guess(game.capacity, game.my_guess)
-            game.my_string_for_you = think_of_number_for_you(game.capacity)
+            game.my_number = think_of_number_for_you(game.capacity)
             game.attempts += 1
             game.start_timestamp = time()
             game.game_started = True
@@ -1263,7 +1263,7 @@ class MainWin(Tk, AdditionalWindowMethods):
             self.enable_dual_game()
         else:
             self.enable_mono_game()
-        game.my_string_for_you = think_of_number_for_you(game.capacity)  # ???
+        game.my_number = think_of_number_for_you(game.capacity)  # ???
 
     @staticmethod
     def disable_event():
@@ -1740,7 +1740,7 @@ class AboutWindow(Toplevel):
 
     def show_my_guessed_number(self, event):
         if self.game.dual_game_enabled:
-            self.button["text"] = self.game.my_string_for_you
+            self.button["text"] = self.game.my_number
 
 
 class DescriptionWindow(Toplevel):
@@ -1923,7 +1923,7 @@ class ExitMessage:
 
 class BaseMessage:
     def __init__(self, msg):
-        if isinstance(msg, Exception):
+        if type(msg).__name__ == "BNCException":
             if isinstance(msg.msg, dict):
                 text = ''
                 for e in msg.msg.values():
