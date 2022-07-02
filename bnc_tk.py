@@ -3,11 +3,10 @@ import math
 import hashlib
 import random
 import re
+import datetime as dt
+import time as tm
 from collections import defaultdict
-from itertools import permutations
 from secrets import choice
-from datetime import datetime
-from time import time
 from tkinter import Label, Button, Entry, Frame, PhotoImage, LabelFrame, Menu, Checkbutton, DISABLED, NORMAL
 from tkinter import SUNKEN, BOTTOM, E, W, N, S, X, Y
 from tkinter import Toplevel, ttk, Tk
@@ -19,7 +18,7 @@ from email.mime.multipart import MIMEMultipart
 
 import yaml
 from yaml.loader import SafeLoader
-from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, TIMESTAMP
+from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, TIMESTAMP, DateTime
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import NoSuchTableError, SQLAlchemyError, DatabaseError
@@ -78,7 +77,7 @@ class FixtureList(Base):
     username_id = Column(String, ForeignKey(USERS_TABLE + ".username", ondelete="cascade"), nullable=False)
     winner = Column(Integer, nullable=False)
     attempts = Column(Integer, nullable=False)
-    timestamp = Column(TIMESTAMP(timezone=True), nullable=False)
+    time = Column(DateTime(timezone=True), nullable=False)
     duration = Column(Integer, nullable=False)
 
 
@@ -96,7 +95,7 @@ class Game:
         self.total_set = set()
         self.new_game_requested = False
         self.loggedin_user = None
-        self.dual_game_enabled = True
+        self.dual_game = True
         self.user_privileges = None
         self.prepare_game()
         self.game_initials()
@@ -321,7 +320,7 @@ class Game:
             is_superuser=True if login==Game.admin_user else False,
             is_staff=True,
             is_active=True,
-            date_joined=datetime.fromtimestamp(time()).strftime("%Y.%m.%d %H:%M:%S.%f")
+            date_joined=dt.datetime.now().strftime("%Y.%m.%d %H:%M:%S")
         )
         try:
             Game.validate_db_user(db_user, "other")
@@ -634,8 +633,8 @@ class Game:
     def record_login_time(login):
         session = Game.get_db_session(login, "")
         try:
-            session.query(BnCUsers).filter_by(username=login).update({"last_login":
-                                                                       datetime.fromtimestamp(time()).strftime("%Y.%m.%d %H:%M:%S.%f")})
+            session.query(BnCUsers).filter_by(username=login).update(
+                    {"last_login":dt.datetime.now().strftime("%Y.%m.%d %H:%M:%S")})
             session.commit()
             session.close()
         except Exception:
@@ -684,17 +683,18 @@ class Game:
         self.my_guess = ''
         self.attempts = 0
         self.game_started = False
-        self.start_timestamp = None
-        self.finish_timestamp = None
+        self.start_time = None
+        self.finish_time = None
 
     def write_fl_to_db(self, result_code):
-
+        start_timestamp = dt.datetime.timestamp(self.start_time)
+        finish_timestamp = dt.datetime.timestamp(self.finish_time)
         fl_item = FixtureList(
             username_id=self.loggedin_user,
             winner=result_code,  # continue from this
             attempts=self.attempts,
-            timestamp=self.start_timestamp,
-            duration=math.ceil((self.finish_timestamp - self.start_timestamp) / 60)
+            time=self.start_time,
+            duration=math.ceil((finish_timestamp - start_timestamp) / 60)
         )
         try:
             session = Game.get_db_session(self.loggedin_user, "")
@@ -725,8 +725,8 @@ class Game:
         fl_data_from_db = self.read_fl_from_db()
         data_for_treeview = list()
         for row in fl_data_from_db:
-            login = str(row.login)
-            user_data = self.get_user_by_login(login)
+            username_id = str(row.username_id)
+            user_data = self.get_user_by_login(username_id)
             first_name = str(user_data.first_name)
             last_name = str(user_data.last_name)
             if int(row.winner) == 1:
@@ -736,9 +736,9 @@ class Game:
             else:
                 winner = "Tie"
             attempts = int(row.attempts)
-            date = datetime.fromtimestamp(int(row.timestamp)).strftime("%Y.%m.%d")
+            date = dt.datetime.strftime(row.time,"%Y.%m.%d %H:%M:%S")
             duration = str(row.duration) + "min"
-            entry = (login, first_name, last_name, winner, attempts, date, duration)
+            entry = (username_id, first_name, last_name, winner, attempts, date, duration)
             data_for_treeview.append(entry)
         return data_for_treeview
 
@@ -1163,9 +1163,9 @@ class MainWin(Tk, AdditionalWindowMethods):
             game.my_guess = get_my_first_guess(game.capacity, game.my_guess)
             game.my_number = think_of_number_for_you(game.capacity)
             game.attempts += 1
-            game.start_timestamp = time()
+            game.start_time = dt.datetime.now()
             game.game_started = True
-            if game.dual_game_enabled:
+            if game.dual_game:
                 self.change_data_on_window_dual_game()
                 self.time_counter()
             else:
@@ -1180,7 +1180,7 @@ class MainWin(Tk, AdditionalWindowMethods):
                 self.my_cows_entry["state"] = "disabled"
                 self.my_bulls_label["state"] = "disabled"
                 self.my_bulls_entry["state"] = "disabled"
-            if game.dual_game_enabled:
+            if game.dual_game:
                 self.my_upper_label["state"] = "normal"
                 self.your_upper_label["state"] = "normal"
                 self.your_guess_entry["state"] = "normal"
@@ -1202,7 +1202,7 @@ class MainWin(Tk, AdditionalWindowMethods):
                 return
             game.my_cows = int(my_cows_entered)
             game.my_bulls = int(my_bulls_entered)
-        if game.dual_game_enabled and game.attempts > 0:
+        if game.dual_game and game.attempts > 0:
             your_guess_entered = self.your_guess_entry.get().strip()
             try:
                 validate_your_guess(game.capacity, your_guess_entered)
@@ -1229,7 +1229,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         if your_result and my_result:
             self.finish_game_on_main_window(3)
             return
-        if game.dual_game_enabled:
+        if game.dual_game:
             self.change_data_on_window_dual_game()
         else:
             self.change_data_on_window_mono_game()
@@ -1259,7 +1259,7 @@ class MainWin(Tk, AdditionalWindowMethods):
     def new_game_window(self):
         game = self.game
         game.game_initials()
-        if game.dual_game_enabled:
+        if game.dual_game:
             self.enable_dual_game()
         else:
             self.enable_mono_game()
@@ -1274,7 +1274,7 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def finish_game_on_main_window(self, game_result_code):
         game = self.game
-        game.finish_timestamp = time()
+        game.finish_time = dt.datetime.now()
         game.game_started = False
         if game_result_code == 0:  ####
             self.upper_label['text'] = "You have broken my mind! Please be more carefull!\nThink of a new number!"
@@ -1300,7 +1300,7 @@ class MainWin(Tk, AdditionalWindowMethods):
         self.my_cows_entry["state"] = "disabled"
         self.my_bulls_label["state"] = "disabled"
         self.my_bulls_entry["state"] = "disabled"
-        if self.game.dual_game_enabled:
+        if self.game.dual_game:
             self.my_upper_label["state"] = "disabled"
             self.your_upper_label["state"] = "disabled"
             self.your_guess_entry.delete(0, "end")
@@ -1470,12 +1470,12 @@ class MainWin(Tk, AdditionalWindowMethods):
         setting_window.dual_game_label = Label(setting_window, text='Dual game: ', font='arial 8')
         setting_window.dual_game_label.place(x=10, y=45)
         setting_window.cb_variable = BooleanVar()
-        setting_window.cb_variable.set(int(game.dual_game_enabled))
+        setting_window.cb_variable.set(int(game.dual_game))
         setting_window.dual_game_checkbox = Checkbutton(setting_window, variable=setting_window.cb_variable,
                                                         onvalue=1, offvalue=0,
                                                         command=setting_window.switch_dual_game)
         setting_window.dual_game_checkbox.place(x=70, y=40)
-        setting_window.dual_game_checkbox.select() if game.dual_game_enabled else \
+        setting_window.dual_game_checkbox.select() if game.dual_game else \
             setting_window.dual_game_checkbox.deselect()
         if game.game_started:
             setting_window.cap_button["state"] = "disabled"
@@ -1488,7 +1488,7 @@ class MainWin(Tk, AdditionalWindowMethods):
 
     def open_fixture_list_window_eh(self):
         game = self.game
-        if not game.dual_game_enabled:
+        if not game.dual_game:
             return
         try:
             fl_data = game.get_data_for_fixture_table()
@@ -1678,7 +1678,7 @@ class SettingWindow(Toplevel):
         if new_capacity < 3 or new_capacity > 6:
             return
         self.game.capacity = new_capacity
-        if self.game.dual_game_enabled:
+        if self.game.dual_game:
             self.main_window.upper_label["text"] = "Think of a number with " + str(new_capacity) \
                                                    + " unique digits!\nAnd I will think of " \
                                                      "a number to guess for you!"
@@ -1692,8 +1692,8 @@ class SettingWindow(Toplevel):
         # self.setting_window.withdraw()
 
     def switch_dual_game(self):
-        self.game.dual_game_enabled = bool(self.cb_variable.get())
-        if self.game.dual_game_enabled:
+        self.game.dual_game = bool(self.cb_variable.get())
+        if self.game.dual_game:
             self.main_window.enable_dual_game()
         else:
             self.main_window.enable_mono_game()
@@ -1711,7 +1711,7 @@ class AboutWindow(Toplevel):
 
     def input_your_string_for_automation_game(self, event):
         game = self.game
-        if game.game_started or game.new_game_requested or game.dual_game_enabled: return
+        if game.game_started or game.new_game_requested or game.dual_game: return
         if not self.your_string_entry:
             self.geometry(f'{self.win_width}x{self.win_height + 20}')
             self.your_string_entry = Entry(self, width=game.capacity + 2, font='Arial 8', state='normal')
@@ -1739,7 +1739,7 @@ class AboutWindow(Toplevel):
                 break
 
     def show_my_guessed_number(self, event):
-        if self.game.dual_game_enabled:
+        if self.game.dual_game:
             self.button["text"] = self.game.my_number
 
 
@@ -1976,7 +1976,7 @@ def run(previous_win=None):
     main_win = MainWin()
     main_win.game = game
     main_win.show_main_window_menu()
-    if game.dual_game_enabled:
+    if game.dual_game:
         main_win.enable_dual_game()
     else:
         main_win.enable_mono_game()
