@@ -1923,7 +1923,7 @@ class ExitMessage:
 
 class BaseMessage:
     def __init__(self, msg):
-        if type(msg).__name__ == "BNCException":
+        if isinstance(msg, BnCException):
             if isinstance(msg.msg, dict):
                 text = ''
                 for e in msg.msg.values():
