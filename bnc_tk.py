@@ -738,7 +738,7 @@ class Game:
             attempts = int(row.attempts)
             date = dt.datetime.strftime(row.time,"%Y.%m.%d %H:%M:%S")
             duration = str(row.duration) + "min"
-            entry = (username_id, first_name, last_name, winner, attempts, date, duration)
+            entry = (first_name, last_name, username_id, winner, attempts, date, duration)
             data_for_treeview.append(entry)
         return data_for_treeview
 
