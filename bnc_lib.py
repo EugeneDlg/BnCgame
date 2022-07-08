@@ -1,6 +1,7 @@
 from secrets import choice
 from itertools import permutations
 import random
+import datetime as dt
 
 
 def get_my_first_guess(capacity: int, guess='') -> str:
@@ -219,6 +220,28 @@ def calc_bulls_and_cows(true_number: str, guess_number: str):
                     bulls += 1
                 break
     return cows, bulls
+
+
+def get_data_for_fixture_table(fl_raw_data, get_user_data_function):
+    data_for_table = list()
+    for row in fl_raw_data:
+        username = str(row.username_id)
+        user_data = get_user_data_function(username=username)
+        first_name = str(user_data.first_name)
+        last_name = str(user_data.last_name)
+        if int(row.winner) == 1:
+            winner = "Me"
+        elif int(row.winner) == 2:
+            winner = "You"
+        else:
+            winner = "Tie"
+        attempts = int(row.attempts)
+        # date = dt.datetime.strftime(row.time,"%Y.%m.%d %H:%M:%S")
+        date = f"{row.time:%Y.%m.%d %H:%M:%S}"
+        duration = str(row.duration) + "min"
+        entry = (first_name, last_name, username, winner, attempts, date, duration)
+        data_for_table.append(entry)
+    return data_for_table
 
 
 class UserNotFoundException(Exception):

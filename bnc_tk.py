@@ -27,6 +27,7 @@ from sqlalchemy.ext.declarative import declarative_base
 
 from bnc_lib import get_my_first_guess, think_of_number_for_you, make_my_guess, make_your_guess, calc_bulls_and_cows
 from bnc_lib import validate_cows_and_bulls, validate_your_guess
+from bnc_lib import get_data_for_fixture_table
 from bnc_lib import BnCException, FinishedNotOKException, InvalidLoginException
 from bnc_lib import IncorrectPasswordException, IncorrectDBPasswordException
 
@@ -388,10 +389,10 @@ class Game:
             raise
 
     @staticmethod
-    def get_user_by_login(login):
+    def get_user_by_login(username):
         try:
             session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
-            r0 = session.query(BnCUsers).filter_by(username=login).first()
+            r0 = session.query(BnCUsers).filter_by(username=username).first()
             session.close()
         except Exception:
             try:
@@ -721,26 +722,7 @@ class Game:
             raise
         return data
 
-    def get_data_for_fixture_table(self):
-        fl_data_from_db = self.read_fl_from_db()
-        data_for_treeview = list()
-        for row in fl_data_from_db:
-            username_id = str(row.username_id)
-            user_data = self.get_user_by_login(username_id)
-            first_name = str(user_data.first_name)
-            last_name = str(user_data.last_name)
-            if int(row.winner) == 1:
-                winner = "Me"
-            elif int(row.winner) == 2:
-                winner = "You"
-            else:
-                winner = "Tie"
-            attempts = int(row.attempts)
-            date = dt.datetime.strftime(row.time,"%Y.%m.%d %H:%M:%S")
-            duration = str(row.duration) + "min"
-            entry = (first_name, last_name, username_id, winner, attempts, date, duration)
-            data_for_treeview.append(entry)
-        return data_for_treeview
+
 
 
 class AdditionalWindowMethods:
@@ -1491,7 +1473,8 @@ class MainWin(Tk, AdditionalWindowMethods):
         if not game.dual_game:
             return
         try:
-            fl_data = game.get_data_for_fixture_table()
+            fl_raw_data = game.read_fl_from_db()
+            fl_data = get_data_for_fixture_table(fl_raw_data, game.get_user_by_login)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
             return
