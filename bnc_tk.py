@@ -11,13 +11,9 @@ from tkinter import Label, Button, Entry, Frame, PhotoImage, LabelFrame, Menu, C
 from tkinter import SUNKEN, BOTTOM, E, W, N, S, X, Y
 from tkinter import Toplevel, ttk, Tk
 from tkinter import StringVar, BooleanVar
-import smtplib
-import ssl
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 
-import yaml
-from yaml.loader import SafeLoader
+
+
 from sqlalchemy import Column, ForeignKey, Integer, String, Boolean, TIMESTAMP, DateTime
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
@@ -30,6 +26,7 @@ from bnc_lib import validate_cows_and_bulls, validate_your_guess
 from bnc_lib import get_data_for_fixture_table
 from bnc_lib import BnCException, FinishedNotOKException, InvalidLoginException
 from bnc_lib import IncorrectPasswordException, IncorrectDBPasswordException
+from bnc_lib import read_config, send_email
 
 CONFIG_PATH = "bnc_config.yml"
 # DB_CONN_STRING = "postgresql+psycopg2://bncuser@127.0.0.1:5432/bnc"
@@ -89,7 +86,7 @@ class Game:
     sessions = defaultdict(bool)
 
     def __init__(self, capacity=4):
-        super().__init__()
+        self.settings = {}
         self.capacity = capacity
         self.my_history_list = list()
         self.your_history_list = list()
@@ -166,60 +163,11 @@ class Game:
     #         raise IncorrectPasswordException
 
     @staticmethod
-    def send_email(email, message_type, replace_list):
-        password = Game.base64_decode_(Game.smtp_password)
-        smtp_address = Game.smtp_address
-        ssl_port = Game.ssl_port
-        email_msg = MIMEMultipart("alternative")
-        sender_email = Game.bnc_email
-        receiver_email = email
-        # receiver_email = "stayerx@gmail.com"
-        subject = Game.email_messages[message_type]['subject']
-        email_msg["Subject"] = subject
-        email_msg["From"] = sender_email
-        email_msg["To"] = receiver_email
-        ### continue
-        text = Game.email_messages[message_type]['text']
-        html = Game.email_messages[message_type]['html']
-        for e in replace_list:
-            text = text.replace(e[0], e[1])
-            html = html.replace(e[0], e[1])
-        p1 = MIMEText(text, "plain")
-        p2 = MIMEText(html, "html")
-        email_msg.attach(p1)
-        email_msg.attach(p2)
-        context = ssl.create_default_context()
-        try:
-            with smtplib.SMTP_SSL(smtp_address, ssl_port, context=context) as srv:
-                srv.login(sender_email, password)
-                srv.sendmail(sender_email, receiver_email, email_msg.as_string())
-        except Exception:
-            raise
-
-    @staticmethod
     def validate_pincode(entered_pincode, correct_pincode):
         if not entered_pincode.isnumeric():
             raise BnCException("Pin code must contain only digits")
         if correct_pincode != entered_pincode:
             raise BnCException("Incorrect pincode")
-
-    # @staticmethod
-    # def populate(interim_str, items_for_templates):
-    #     guess_set = set()
-    #     if interim_str.count('V') == 0:
-    #         guess_set.add(''.join(interim_str))
-    #     else:
-    #         for y in items_for_templates:
-    #             i = 0
-    #             a = ''
-    #             for z in interim_str:
-    #                 if z == "V":
-    #                     a += y[i]
-    #                     i += 1
-    #                 else:
-    #                     a += z
-    #             guess_set.add(a[:])
-    #     return guess_set
 
     def write_set(self):
         my_guess = str(self.my_guess)
@@ -245,22 +193,6 @@ class Game:
 
 
     @staticmethod
-    def create_db_user(login_to_create, password_to_create):
-        try:
-            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
-            engine = session.bind.engine
-            if login_to_create != Game.admin_user:
-                sql_command = f"create user {login_to_create} with " \
-                              f"encrypted password '{password_to_create}' in role {Game.db_common_role}"
-            else:
-                sql_command = f"create user {login_to_create} with " \
-                              f"encrypted password '{password_to_create}' in role {Game.db_admin_role}"
-            with engine.connect() as con:
-                con.execute(sql_command)
-        except Exception:
-            raise
-
-    @staticmethod
     def modify_db_user(login_to_modify, password_to_modify):
         try:
             session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
@@ -283,26 +215,6 @@ class Game:
                 con.execute(sql_command)
         except Exception:
             raise
-
-    @staticmethod
-    def validate_db_user(login, op):
-        try:
-            session = Game.get_db_session(Game.default_db_user, Game.default_db_password)
-            engine = session.bind.engine
-            sql_command = f"select * from pg_roles where rolname='{login}'"
-            with engine.connect() as con:
-                result = con.execute(sql_command)
-        except Exception:
-            raise
-        try:
-            next(result)
-        except StopIteration:
-            if op != "create":
-                raise BnCException("No such user in the database!")
-            return
-        if op == "create":
-            raise BnCException("The user already exists in the database! "
-                               "Ask database administrator to delete him")
 
     @staticmethod
     def create_user(*args):
@@ -665,11 +577,6 @@ class Game:
         except Exception:
             raise
 
-    @staticmethod
-    def base64_decode_(encoded_string):
-        return base64.b64decode(encoded_string.encode("ascii")).decode("ascii")
-
-
     def game_initials(self):
         self.total_set.clear()
         self.my_history_list.clear()
@@ -888,7 +795,7 @@ class LoginWindow(Toplevel, AdditionalWindowMethods):
         recovery_window.pincode = Game.generate_pincode()
         replace_list = (("PINCODE", recovery_window.pincode),)
         try:
-            Game.send_email(email, "pincode", replace_list)
+            send_email(Game.settings, email, "pincode", replace_list)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
         # recovery_window.close()
@@ -944,7 +851,7 @@ class UsersWindow(Toplevel):
             return
         replace_list = (("FIRSTNAME", firstname), ("LASTNAME", lastname))
         try:
-            Game.send_email(email, "welcome", replace_list)
+            send_email(Game.settings, email, "welcome", replace_list)
         except Exception as exc:
             MessageBox.show_message(self, ErrorMessage(exc))
         self.login_entry.delete(0, 'end')
@@ -1967,28 +1874,7 @@ def run(previous_win=None):
     main_win.mainloop()
 
 
-def read_config():
-    with open(CONFIG_PATH) as f:
-        raw_config = yaml.load(f, Loader=SafeLoader)
-    Game.email_messages = dict()
-    Game.email_messages["welcome"] = dict()
-    Game.email_messages["pincode"] = dict()
-    Game.email_messages["welcome"]["text"] = raw_config["welcome"]["text"]
-    Game.email_messages["welcome"]["html"] = raw_config["welcome"]["html"]
-    Game.email_messages["welcome"]["subject"] = raw_config["welcome"]["subject"]
-    Game.email_messages["pincode"]["text"] = raw_config["pincode"]["text"]
-    Game.email_messages["pincode"]["html"] = raw_config["pincode"]["html"]
-    Game.email_messages["pincode"]["subject"] = raw_config["pincode"]["subject"]
-    Game.db_conn_string_pre = raw_config["db_connection_string_prefix"]
-    Game.default_db_user = raw_config["default_db_user"]
-    Game.default_db_password = raw_config["default_db_password"]
-    Game.db_socket = raw_config["db_socket"]
-    Game.admin_user = raw_config["admin_user"]
-    Game.smtp_address = raw_config["smtp_address"]
-    Game.bnc_email = raw_config["bnc_email"]
-    Game.ssl_port = raw_config["ssl_port"]
-    Game.smtp_password = raw_config["smtp_password"]
-    Game.phrases_path = raw_config["phrases_path"]
+
 
 
 def read_phrases():
@@ -2028,7 +1914,7 @@ def check_password(password, password_from_db):
         raise IncorrectPasswordException
 
 
-read_config()
+Game.settings = read_config(CONFIG_PATH)
 read_phrases()
 if __name__ == '__main__':
     run()

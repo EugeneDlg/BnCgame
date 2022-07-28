@@ -2,6 +2,20 @@ from secrets import choice
 from itertools import permutations
 import random
 import datetime as dt
+import base64
+
+import smtplib
+import ssl
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import yaml
+from yaml.loader import SafeLoader
+
+
+def base64_decode_(encoded_string):
+    return base64.b64decode(encoded_string.encode("ascii")).decode("ascii")
 
 
 def get_my_first_guess(capacity: int, guess='') -> str:
@@ -242,6 +256,126 @@ def get_data_for_fixture_table(fl_raw_data, get_user_data_function):
         entry = (first_name, last_name, username, winner, attempts, date, duration)
         data_for_table.append(entry)
     return data_for_table
+
+
+# def create_db_user(login_to_create, password_to_create):
+#     try:
+#         session = GameParams.get_db_session(GameParams.default_db_user, GameParams.default_db_password)
+#         engine = session.bind.engine
+#         if login_to_create != Game.admin_user:
+#             sql_command = f"create user {login_to_create} with " \
+#                           f"encrypted password '{password_to_create}' in role {Game.db_common_role}"
+#         else:
+#             sql_command = f"create user {login_to_create} with " \
+#                           f"encrypted password '{password_to_create}' in role {Game.db_admin_role}"
+#         with engine.connect() as con:
+#             con.execute(sql_command)
+#     except Exception:
+#         raise
+
+
+def get_db_session(user, password, settings):
+        if user == settings["default_db_user"]:
+            password = base64_decode_(password)
+        db_conn_string = settings["db_conn_string_pre"] + str(user) + ":" + str(password) + "@" \
+                         + settings["db_socket"] + "/" + settings["db_name"]
+        # m = re.search(r":([^/].+)@", DB_CONN_STRING)
+        # db_conn_string = DB_CONN_STRING.replace(m.group(1), Game.base64_decode_(m.group(1)))
+        try:
+            if user != settings["default_db_user"]:
+                validate_db_user(user, "other")
+            engine = create_engine(db_conn_string)
+            DBSession = sessionmaker(bind=engine)
+            session = DBSession()
+            return session
+        except Exception:
+            raise
+
+
+def validate_db_user(login, op, settings):
+    try:
+        session = get_db_session(settings["default_db_user"], settings["default_db_password"], settings)
+        engine = session.bind.engine
+        sql_command = f"select * from pg_roles where rolname='{login}'"
+        with engine.connect() as con:
+            result = con.execute(sql_command)
+    except Exception:
+        raise
+    try:
+        next(result)
+    except StopIteration:
+        if op != "create":
+            raise BnCException("No such user in the database!")
+        return
+    if op == "create":
+        raise BnCException("The user already exists in the database! "
+                           "Ask database administrator to delete him")
+
+
+def read_config(config_path):
+    with open(config_path) as f:
+        raw_config = yaml.load(f, Loader=SafeLoader)
+    settings = dict()
+    # email_messages = dict()
+    # email_messages["welcome"] = dict()
+    # email_messages["pincode"] = dict()
+    settings["email_messages"] = dict()
+    settings["email_messages"]["welcome"] = dict()
+    settings["email_messages"]["pincode"] = dict()
+    settings["email_messages"]["welcome"]["text"] = raw_config["welcome"]["text"]
+    settings["email_messages"]["welcome"]["html"] = raw_config["welcome"]["html"]
+    settings["email_messages"]["welcome"]["subject"] = raw_config["welcome"]["subject"]
+    settings["email_messages"]["pincode"]["text"] = raw_config["pincode"]["text"]
+    settings["email_messages"]["pincode"]["html"] = raw_config["pincode"]["html"]
+    settings["email_messages"]["pincode"]["subject"] = raw_config["pincode"]["subject"]
+    settings["db_conn_string_pre"] = raw_config["db_connection_string_prefix"]
+    settings["default_db_user"] = raw_config["default_db_user"]
+    settings["default_db_password"] = raw_config["default_db_password"]
+    settings["db_socket"] = raw_config["db_socket"]
+    settings["admin_user"] = raw_config["admin_user"]
+    settings["smtp_address"] = raw_config["smtp_address"]
+    settings["bnc_email"] = raw_config["bnc_email"]
+    settings["ssl_port"] = raw_config["ssl_port"]
+    settings["smtp_password"] = raw_config["smtp_password"]
+    settings["phrases_path"] = raw_config["phrases_path"]
+    return settings
+
+
+def send_email(settings, email, message_type, replace_list):
+    password = base64_decode_(settings["smtp_password"])
+    smtp_address = settings["smtp_address"]
+    ssl_port = settings["ssl_port"]
+    email_msg = MIMEMultipart("alternative")
+    sender_email = settings["bnc_email"]
+    receiver_email = email
+    # receiver_email = "stayerx@gmail.com"
+    subject = settings["email_messages"][message_type]["subject"]
+    email_msg["Subject"] = subject
+    email_msg["From"] = sender_email
+    email_msg["To"] = receiver_email
+    ### continue
+    text = settings["email_messages"][message_type]['text']
+    html = settings["email_messages"][message_type]['html']
+    for e in replace_list:
+        text = text.replace(e[0], e[1])
+        html = html.replace(e[0], e[1])
+    p1 = MIMEText(text, "plain")
+    p2 = MIMEText(html, "html")
+    email_msg.attach(p1)
+    email_msg.attach(p2)
+    context = ssl.create_default_context()
+    try:
+        with smtplib.SMTP_SSL(smtp_address, ssl_port, context=context) as srv:
+            srv.login(sender_email, password)
+            srv.sendmail(sender_email, receiver_email, email_msg.as_string())
+    except Exception:
+        raise
+
+# def assign_params(cls, function, *args, **kwargs):
+#     settings = {}
+#     settings = function(*args, **kwargs)
+#     for key, value in settings.items():
+#         setattr(cls, key, value)
 
 
 class UserNotFoundException(Exception):
